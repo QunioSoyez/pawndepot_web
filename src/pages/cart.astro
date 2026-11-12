@@ -1,0 +1,285 @@
+---
+/**
+ * /cart — shows the browser cart (src/lib/cart.ts).
+ * The page itself is static; items are drawn in the browser from localStorage.
+ * Checkout button is wired to Stripe in a later step.
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Cart" description="Your PawnDepot cart.">
+  <h1>Your cart</h1>
+
+  <!-- Shown when the cart is empty -->
+  <div class="empty" data-empty hidden>
+    <p>Your cart is empty — the next train is boarding now.</p>
+    <a href="/shop" class="btn">Shop now</a>
+  </div>
+
+  <!-- Shown when the cart has items -->
+  <div class="cart" data-cart hidden>
+    <ul class="items" data-items></ul>
+
+    <aside class="summary">
+      <div class="row">
+        <span>Subtotal</span>
+        <strong data-subtotal>$0.00</strong>
+      </div>
+      <p class="fine">Shipping and any sales tax are calculated at checkout.</p>
+      <button type="button" class="btn checkout-btn" data-checkout disabled>Checkout (coming soon)</button>
+      <a href="/shop" class="keep-shopping">← Keep shopping</a>
+    </aside>
+  </div>
+
+  <!-- Template for one cart line (cloned by the script) -->
+  <template id="cart-item-template">
+    <li class="item">
+      <a class="item-img" data-link><img alt="" width="96" height="96" data-img /></a>
+      <div class="item-info">
+        <a class="item-title" data-link data-title></a>
+        <p class="item-variant" data-variant></p>
+        <p class="item-price" data-price></p>
+      </div>
+      <div class="qty" role="group" aria-label="Quantity">
+        <button type="button" class="qty-btn" data-dec aria-label="Decrease quantity">−</button>
+        <span class="qty-num" data-qty aria-live="polite"></span>
+        <button type="button" class="qty-btn" data-inc aria-label="Increase quantity">+</button>
+      </div>
+      <p class="line-total" data-line-total></p>
+      <button type="button" class="remove" data-remove>Remove</button>
+    </li>
+  </template>
+</BaseLayout>
+
+<script>
+  import { onCartChange, setQuantity, removeItem, MAX_QTY_PER_ITEM, type CartItem } from '../lib/cart';
+
+  const fmt = (c: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(c / 100);
+
+  const emptyEl = document.querySelector<HTMLElement>('[data-empty]')!;
+  const cartEl = document.querySelector<HTMLElement>('[data-cart]')!;
+  const listEl = document.querySelector<HTMLUListElement>('[data-items]')!;
+  const subtotalEl = document.querySelector<HTMLElement>('[data-subtotal]')!;
+  const template = document.getElementById('cart-item-template') as HTMLTemplateElement;
+
+  function renderItem(item: CartItem): HTMLLIElement {
+    const li = (template.content.firstElementChild as HTMLLIElement).cloneNode(true) as HTMLLIElement;
+    const href = `/product/${encodeURIComponent(item.productId)}`;
+
+    // textContent / attributes only (no innerHTML) — cart data comes from localStorage
+    li.querySelectorAll<HTMLAnchorElement>('[data-link]').forEach((a) => (a.href = href));
+    const img = li.querySelector<HTMLImageElement>('[data-img]')!;
+    if (item.image) img.src = item.image;
+    else img.remove();
+    li.querySelector('[data-title]')!.textContent = item.title;
+    li.querySelector('[data-variant]')!.textContent = item.variantTitle;
+    li.querySelector('[data-price]')!.textContent = `${fmt(item.price)} each`;
+    li.querySelector('[data-qty]')!.textContent = String(item.quantity);
+    li.querySelector('[data-line-total]')!.textContent = fmt(item.price * item.quantity);
+
+    li.querySelector<HTMLButtonElement>('[data-dec]')!.addEventListener('click', () =>
+      setQuantity(item.productId, item.variantId, item.quantity - 1),
+    );
+    const inc = li.querySelector<HTMLButtonElement>('[data-inc]')!;
+    inc.disabled = item.quantity >= MAX_QTY_PER_ITEM;
+    inc.addEventListener('click', () => setQuantity(item.productId, item.variantId, item.quantity + 1));
+    li.querySelector<HTMLButtonElement>('[data-remove]')!.addEventListener('click', () =>
+      removeItem(item.productId, item.variantId),
+    );
+    return li;
+  }
+
+  onCartChange((items) => {
+    const hasItems = items.length > 0;
+    emptyEl.hidden = hasItems;
+    cartEl.hidden = !hasItems;
+    listEl.replaceChildren(...items.map(renderItem));
+    subtotalEl.textContent = fmt(items.reduce((s, i) => s + i.price * i.quantity, 0));
+  });
+</script>
+
+<style>
+  .empty {
+    padding: 2rem;
+    background: var(--white);
+    border-left: 4px solid var(--depot-red);
+    border-radius: var(--radius);
+    max-width: 560px;
+  }
+
+  .cart {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 2rem;
+    align-items: start;
+  }
+
+  /* `hidden` must win over display:grid above */
+  .cart[hidden],
+  .empty[hidden] {
+    display: none;
+  }
+
+  .items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background: var(--white);
+    border: 1px solid var(--rail);
+    border-radius: var(--radius);
+  }
+
+  .item {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border-bottom: 1px solid var(--rail);
+  }
+
+  .item:last-child {
+    border-bottom: 0;
+  }
+
+  .item-img img {
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+    border-radius: var(--radius);
+    background: var(--paper);
+  }
+
+  .item-title {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .item-title:hover {
+    color: var(--depot-red);
+  }
+
+  .item-variant,
+  .item-price {
+    margin: 0;
+    color: var(--steel);
+    font-size: 0.9rem;
+  }
+
+  .qty {
+    display: inline-flex;
+    align-items: center;
+    border: 2px solid var(--rail);
+    border-radius: var(--radius);
+  }
+
+  .qty-btn {
+    width: 2rem;
+    height: 2rem;
+    border: 0;
+    background: transparent;
+    font-size: 1.1rem;
+    cursor: pointer;
+  }
+
+  .qty-btn:hover:not(:disabled) {
+    background: var(--paper);
+  }
+
+  .qty-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .qty-num {
+    min-width: 2ch;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .line-total {
+    margin: 0;
+    min-width: 5.5rem;
+    text-align: right;
+    font-weight: 700;
+  }
+
+  .remove {
+    border: 0;
+    background: none;
+    color: var(--steel);
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+
+  .remove:hover {
+    color: var(--depot-red);
+  }
+
+  /* --- Summary --- */
+  .summary {
+    position: sticky;
+    top: 1rem;
+    padding: 1.25rem;
+    background: var(--white);
+    border: 1px solid var(--rail);
+    border-top: 4px solid var(--depot-red);
+    border-radius: var(--radius);
+  }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.2rem;
+  }
+
+  .fine {
+    font-size: 0.85rem;
+    color: var(--steel);
+    margin: 0.5rem 0 1rem;
+  }
+
+  .checkout-btn {
+    width: 100%;
+  }
+
+  .keep-shopping {
+    display: block;
+    margin-top: 0.9rem;
+    text-align: center;
+    font-size: 0.9rem;
+  }
+
+  /* --- Small screens --- */
+  @media (max-width: 860px) {
+    .cart {
+      grid-template-columns: 1fr;
+    }
+    .summary {
+      position: static;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .item {
+      grid-template-columns: 72px minmax(0, 1fr) auto;
+      grid-template-areas:
+        'img info info'
+        'img qty total'
+        'img remove remove';
+      row-gap: 0.5rem;
+    }
+    .item-img { grid-area: img; align-self: start; }
+    .item-img img { width: 72px; height: 72px; }
+    .item-info { grid-area: info; }
+    .qty { grid-area: qty; justify-self: start; }
+    .line-total { grid-area: total; }
+    .remove { grid-area: remove; justify-self: start; padding: 0; }
+  }
+</style>
