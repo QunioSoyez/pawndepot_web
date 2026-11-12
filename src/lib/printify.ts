@@ -125,7 +125,9 @@ export async function printifyFetch<T>(path: string, init: RequestInit = {}): Pr
     const body = (await res.text()).slice(0, 300);
     throw new Error(`Printify ${init.method ?? 'GET'} ${path} failed: ${res.status} ${body}`);
   }
-  return res.json() as Promise<T>;
+  // Some endpoints (e.g. publishing_succeeded) may reply with an empty body
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export function getShopId(): string {
@@ -259,6 +261,29 @@ export async function getProducts(): Promise<Product[]> {
   }
 
   return products;
+}
+
+/**
+ * Forget cached products so the next request re-reads Printify.
+ * Clears this instance's memory + this data center's edge cache. Other data centers
+ * still expire on their own within CACHE_SECONDS — good enough.
+ */
+export async function clearProductCache(): Promise<void> {
+  memoryCache = null;
+  const edgeCache = (globalThis as unknown as { caches?: { default?: Cache } }).caches?.default;
+  if (edgeCache) await edgeCache.delete(CACHE_KEY);
+}
+
+/**
+ * Tell Printify a product is live on our site. This unlocks it in Printify
+ * (is_locked → false) and sets external.id / external.handle.
+ */
+export async function confirmPublished(productId: string, productUrl: string): Promise<void> {
+  const shopId = getShopId();
+  await printifyFetch<unknown>(`/shops/${shopId}/products/${productId}/publishing_succeeded.json`, {
+    method: 'POST',
+    body: JSON.stringify({ external: { id: productId, handle: productUrl } }),
+  });
 }
 
 /** One product by its Printify id, or undefined if not found / hidden. */
