@@ -1,0 +1,406 @@
+---
+/**
+ * /product/<printify-id> — product detail page.
+ * Server side: loads the product from Printify (cached).
+ * Browser side: option pickers (color/size/etc.), photo swap, price + stock status.
+ * "Add to cart" is wired up in the cart step.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getProduct, formatPrice, primaryImage, type Product } from '../../lib/printify';
+
+export const prerender = false;
+
+const { id } = Astro.params;
+
+let product: Product | undefined;
+let loadError = false;
+
+try {
+  product = id ? await getProduct(id) : undefined;
+} catch (err) {
+  console.error('[product] Failed to load product', id, err);
+  loadError = true;
+}
+
+if (!product && !loadError) Astro.response.status = 404;
+if (loadError) Astro.response.status = 503;
+
+// Browser needs only what the pickers use. Escape "<" so the JSON can't break out of the <script> tag.
+const clientData = product
+  ? JSON.stringify({
+      id: product.id,
+      title: product.title,
+      options: product.options,
+      variants: product.variants,
+      images: product.images,
+    }).replace(/</g, '\\u003c')
+  : '';
+
+const mainImage = product ? primaryImage(product) : undefined;
+const description = product
+  ? product.descriptionHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 155)
+  : undefined;
+---
+
+<BaseLayout title={product?.title ?? 'Product not found'} description={description}>
+  {loadError && (
+    <div class="notice">
+      <h1>Hang tight</h1>
+      <p>We couldn't load this product right now. Please try again in a few minutes.</p>
+      <a href="/shop" class="btn btn--outline">Back to shop</a>
+    </div>
+  )}
+
+  {!loadError && !product && (
+    <div class="notice">
+      <h1>Product not found</h1>
+      <p>This item may have left the station. Take a look at what's in stock.</p>
+      <a href="/shop" class="btn">Back to shop</a>
+    </div>
+  )}
+
+  {product && (
+    <article class="product" data-product-page>
+      <!-- Photos -->
+      <div class="gallery">
+        <div class="main-img">
+          {mainImage && (
+            <img src={mainImage.src} alt={product.title} width="800" height="800" data-main-img />
+          )}
+        </div>
+        {product.images.length > 1 && (
+          <ul class="thumbs" aria-label="More photos">
+            {product.images.map((img, i) => (
+              <li>
+                <button type="button" class:list={['thumb', { active: img.src === mainImage?.src }]} data-thumb={img.src} aria-label={`Photo ${i + 1}`}>
+                  <img src={img.src} alt="" width="120" height="120" loading="lazy" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <!-- Details + pickers -->
+      <div class="details">
+        <a href="/shop" class="back">← Back to shop</a>
+        <h1>{product.title}</h1>
+        <p class="price" data-price>{formatPrice(product.priceMin)}</p>
+
+        {product.options.map((opt) => (
+          <fieldset class="option" data-option-type={opt.type}>
+            <legend>
+              {opt.type === 'color' ? 'Color' : opt.type === 'size' ? 'Size' : opt.name}:
+              <span class="option-selected" data-option-label></span>
+            </legend>
+            <div class="option-values">
+              {opt.values.map((val) =>
+                opt.type === 'color' && val.colors?.length ? (
+                  <button
+                    type="button"
+                    class="opt opt--swatch"
+                    data-value-id={val.id}
+                    data-value-title={val.title}
+                    title={val.title}
+                    aria-label={val.title}
+                    style={`--swatch:${val.colors[0]}`}
+                  ></button>
+                ) : (
+                  <button type="button" class="opt opt--text" data-value-id={val.id} data-value-title={val.title}>
+                    {val.title}
+                  </button>
+                ),
+              )}
+            </div>
+          </fieldset>
+        ))}
+
+        <p class="stock" data-stock aria-live="polite"></p>
+
+        <button type="button" class="btn add-btn" data-add-to-cart disabled>Add to cart</button>
+
+        <div class="description" set:html={product.descriptionHtml} />
+      </div>
+    </article>
+  )}
+
+  {product && <script type="application/json" id="product-data" set:html={clientData} />}
+</BaseLayout>
+
+<script>
+  // Runs in the browser. Keeps the page in sync with the chosen options.
+  type OptionValue = { id: number; title: string };
+  type Variant = { id: number; title: string; price: number; available: boolean; options: number[] };
+  type Img = { src: string; variantIds: number[] };
+  type Data = { id: string; title: string; options: { type: string; values: OptionValue[] }[]; variants: Variant[]; images: Img[] };
+
+  const dataEl = document.getElementById('product-data');
+  const page = document.querySelector<HTMLElement>('[data-product-page]');
+
+  if (dataEl && page) {
+    const data: Data = JSON.parse(dataEl.textContent || '{}');
+    const fmt = (c: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(c / 100);
+
+    const priceEl = page.querySelector<HTMLElement>('[data-price]')!;
+    const stockEl = page.querySelector<HTMLElement>('[data-stock]')!;
+    const addBtn = page.querySelector<HTMLButtonElement>('[data-add-to-cart]')!;
+    const mainImg = page.querySelector<HTMLImageElement>('[data-main-img]');
+    const fieldsets = [...page.querySelectorAll<HTMLFieldSetElement>('fieldset[data-option-type]')];
+
+    // selected[optionIndex] = value id (option order matches data.options / fieldsets)
+    const selected: (number | null)[] = data.options.map(() => null);
+
+    // Start from the first in-stock variant (fall back to the first variant)
+    const start = data.variants.find((v) => v.available) ?? data.variants[0];
+    if (start) {
+      data.options.forEach((opt, i) => {
+        const match = opt.values.find((val) => start.options.includes(val.id));
+        selected[i] = match ? match.id : null;
+      });
+    }
+
+    // Variant whose option ids include every selected value (order-independent)
+    const findVariant = (sel: (number | null)[]) =>
+      data.variants.find((v) => sel.every((id) => id === null || v.options.includes(id)));
+
+    function showImage(src: string) {
+      if (!mainImg) return;
+      mainImg.src = src;
+      page!.querySelectorAll<HTMLButtonElement>('[data-thumb]').forEach((t) => t.classList.toggle('active', t.dataset.thumb === src));
+    }
+
+    function render() {
+      const variant = findVariant(selected);
+
+      fieldsets.forEach((fs, i) => {
+        const label = fs.querySelector<HTMLElement>('[data-option-label]');
+        fs.querySelectorAll<HTMLButtonElement>('[data-value-id]').forEach((btn) => {
+          const valueId = Number(btn.dataset.valueId);
+          const isSelected = selected[i] === valueId;
+          btn.classList.toggle('selected', isSelected);
+          btn.setAttribute('aria-pressed', String(isSelected));
+          if (isSelected && label) label.textContent = btn.dataset.valueTitle ?? '';
+
+          // Gray out values that have no in-stock variant with the OTHER current selections
+          const trial = [...selected];
+          trial[i] = valueId;
+          const v = findVariant(trial);
+          btn.classList.toggle('unavailable', !v || !v.available);
+        });
+      });
+
+      if (!variant) {
+        stockEl.textContent = 'That combination isn’t offered — try another option.';
+        addBtn.disabled = true;
+        return;
+      }
+
+      priceEl.textContent = fmt(variant.price);
+      stockEl.textContent = variant.available ? '' : 'Out of stock in this option.';
+      addBtn.disabled = !variant.available;
+      addBtn.dataset.variantId = String(variant.id);
+
+      const img = data.images.find((im) => im.variantIds.includes(variant.id));
+      if (img) showImage(img.src);
+    }
+
+    // Option clicks
+    fieldsets.forEach((fs, i) => {
+      fs.addEventListener('click', (e) => {
+        const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-value-id]');
+        if (!btn) return;
+        selected[i] = Number(btn.dataset.valueId);
+        render();
+      });
+    });
+
+    // Thumbnail clicks
+    page.querySelectorAll<HTMLButtonElement>('[data-thumb]').forEach((t) =>
+      t.addEventListener('click', () => showImage(t.dataset.thumb!)),
+    );
+
+    // Add to cart — placeholder until the cart step
+    addBtn.addEventListener('click', () => {
+      const variant = findVariant(selected);
+      if (!variant) return;
+      document.dispatchEvent(new CustomEvent('pawndepot:add-to-cart', { detail: { productId: data.id, variantId: variant.id } }));
+      addBtn.textContent = 'Cart coming soon!';
+      setTimeout(() => (addBtn.textContent = 'Add to cart'), 1500);
+    });
+
+    render();
+  }
+</script>
+
+<style>
+  .notice {
+    max-width: 560px;
+    padding: 2rem;
+    background: var(--white);
+    border-left: 4px solid var(--depot-red);
+    border-radius: var(--radius);
+  }
+
+  .product {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 2.5rem;
+    align-items: start;
+  }
+
+  /* --- Gallery --- */
+  .main-img {
+    aspect-ratio: 1;
+    background: var(--white);
+    border: 1px solid var(--rail);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .main-img img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .thumbs {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 0.5rem;
+    list-style: none;
+    margin: 0.75rem 0 0;
+    padding: 0;
+  }
+
+  .thumb {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 2px solid var(--rail);
+    border-radius: var(--radius);
+    background: var(--white);
+    overflow: hidden;
+    cursor: pointer;
+  }
+
+  .thumb.active,
+  .thumb:hover {
+    border-color: var(--depot-red);
+  }
+
+  /* --- Details --- */
+  .back {
+    display: inline-block;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+    color: var(--steel);
+    text-decoration: none;
+  }
+
+  .back:hover {
+    color: var(--depot-red);
+  }
+
+  .price {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--depot-red);
+  }
+
+  .option {
+    border: 0;
+    margin: 0 0 1.25rem;
+    padding: 0;
+  }
+
+  .option legend {
+    font-family: var(--font-heading);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+  }
+
+  .option-selected {
+    font-family: var(--font-body);
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--steel);
+    margin-left: 0.25rem;
+  }
+
+  .option-values {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .opt {
+    position: relative;
+    cursor: pointer;
+    border: 2px solid var(--rail);
+    background: var(--white);
+    color: var(--ink);
+  }
+
+  .opt--text {
+    min-width: 3.25rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    font-weight: 600;
+  }
+
+  .opt--swatch {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--swatch);
+    box-shadow: inset 0 0 0 2px var(--white);
+  }
+
+  .opt:hover {
+    border-color: var(--ink);
+  }
+
+  .opt.selected {
+    border-color: var(--depot-red);
+    box-shadow: 0 0 0 2px var(--depot-red);
+  }
+
+  .opt--swatch.selected {
+    box-shadow: inset 0 0 0 2px var(--white), 0 0 0 2px var(--depot-red);
+  }
+
+  /* Out of stock with current selections: faded + slashed */
+  .opt.unavailable {
+    opacity: 0.45;
+  }
+
+  .opt--text.unavailable {
+    text-decoration: line-through;
+  }
+
+  .stock {
+    min-height: 1.5em;
+    color: var(--depot-red);
+    font-weight: 600;
+  }
+
+  .add-btn {
+    width: 100%;
+    max-width: 360px;
+    margin-bottom: 2rem;
+  }
+
+  .description {
+    border-top: 1px solid var(--rail);
+    padding-top: 1.25rem;
+    color: #333;
+  }
+
+  @media (max-width: 800px) {
+    .product {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
