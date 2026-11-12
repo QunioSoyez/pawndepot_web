@@ -1,0 +1,58 @@
+---
+/**
+ * /policies/returns — Returns & Refunds.
+ * Static (prerendered). Terms mirror what Printify covers (see project notes):
+ * no returns for change of mind / wrong size; free replacement for damaged,
+ * defective, misprinted or wrong items reported within 14 days of delivery.
+ * If you change these terms, update `updated` below.
+ */
+import PolicyLayout from '../../layouts/PolicyLayout.astro';
+---
+
+<PolicyLayout
+  title="Returns & Refunds"
+  updated="November 12, 2026"
+  description="PawnDepot returns and refunds: free replacements for damaged, defective or misprinted items reported within 14 days of delivery."
+>
+  <h2>Made to order, just for you</h2>
+  <p>
+    Every item is printed after you order it, so we can't accept returns or exchanges for a change
+    of mind or the wrong size. Please double-check your size before ordering.
+  </p>
+
+  <h2>If something's wrong, we'll make it right</h2>
+  <p>We'll send you a free replacement if your item arrives:</p>
+  <ul>
+    <li>damaged</li>
+    <li>defective or misprinted</li>
+    <li>different from what you ordered</li>
+  </ul>
+
+  <h2>How to report a problem</h2>
+  <p>
+    Email <a href="mailto:help@pawndepot.shop">help@pawndepot.shop</a> <strong>within 14 days of
+    delivery</strong> with your order number and a clear photo of the issue. There's no need to send
+    the item back.
+  </p>
+
+  <h2>Lost or late orders</h2>
+  <p>
+    If your order hasn't arrived <strong>3 weeks after you placed it</strong>, email us right away so
+    we can track it down — and replace it if it's lost.
+  </p>
+
+  <h2>Order changes and cancellations</h2>
+  <p>
+    Orders go into production right after they're placed, so we can't change or cancel an order once
+    it's placed. Please double-check your size, color and shipping address before you pay.
+  </p>
+
+  <h2>Wrong address</h2>
+  <p>We can't replace orders sent to an address that was entered incorrectly at checkout.</p>
+
+  <h2>Refunds</h2>
+  <p>
+    If a replacement isn't possible (for example, the item is out of stock), we'll refund you to your
+    original payment method.
+  </p>
+</PolicyLayout>

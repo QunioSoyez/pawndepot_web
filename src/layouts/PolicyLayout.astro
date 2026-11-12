@@ -1,0 +1,122 @@
+---
+/**
+ * Shared layout for /policies/* pages (shipping, returns, privacy).
+ * Wraps BaseLayout and adds: page title, "Last updated" date, readable text
+ * width, and a contact box with help@pawndepot.shop at the bottom.
+ *
+ * Usage:
+ *   <PolicyLayout title="Returns & Refunds" updated="November 12, 2026" description="...">
+ *     <p>...</p>
+ *   </PolicyLayout>
+ */
+import BaseLayout from './BaseLayout.astro';
+
+interface Props {
+  title: string;
+  updated: string;
+  description?: string;
+}
+
+const { title, updated, description } = Astro.props;
+---
+
+<BaseLayout title={title} description={description}>
+  <article class="policy">
+    <header>
+      <p class="eyebrow">Policies</p>
+      <h1>{title}</h1>
+      <p class="updated">Last updated {updated}</p>
+    </header>
+
+    <div class="policy-body">
+      <slot />
+    </div>
+
+    <aside class="contact">
+      <h2>Questions?</h2>
+      <p>
+        Email <a href="mailto:help@pawndepot.shop">help@pawndepot.shop</a> and we'll get back to you.
+      </p>
+    </aside>
+
+    <nav class="policy-nav" aria-label="Other policies">
+      <a href="/policies/shipping">Shipping</a>
+      <a href="/policies/returns">Returns</a>
+      <a href="/policies/privacy">Privacy</a>
+    </nav>
+  </article>
+</BaseLayout>
+
+<style>
+  .policy {
+    max-width: 720px;
+    margin: 0 auto;
+    padding-bottom: 2rem;
+  }
+
+  .eyebrow {
+    font-family: var(--font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--depot-red);
+    margin: 0 0 0.25rem;
+  }
+
+  .updated {
+    color: var(--steel);
+    font-size: 0.9rem;
+    margin-top: 0;
+  }
+
+  /* Page content comes through <slot />, so these need :global() to reach it */
+  .policy-body :global(h2) {
+    margin-top: 2rem;
+    font-size: 1.4rem;
+  }
+
+  .policy-body :global(p),
+  .policy-body :global(li) {
+    line-height: 1.65;
+  }
+
+  .policy-body :global(ul),
+  .policy-body :global(ol) {
+    padding-left: 1.4rem;
+  }
+
+  .policy-body :global(li) {
+    margin-bottom: 0.4rem;
+  }
+
+  .contact {
+    margin-top: 2.5rem;
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.5rem;
+  }
+
+  .contact h2 {
+    color: var(--white);
+    font-size: 1.3rem;
+    margin-bottom: 0.3rem;
+  }
+
+  .contact p {
+    margin: 0;
+  }
+
+  .contact a {
+    color: #f2c94c; /* amber, same as the 404 board + About page */
+  }
+
+  .policy-nav {
+    display: flex;
+    gap: 1.25rem;
+    justify-content: center;
+    margin-top: 1.5rem;
+    font-family: var(--font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+</style>
