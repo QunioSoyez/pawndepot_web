@@ -1,0 +1,49 @@
+---
+/**
+ * /policies/shipping — Shipping policy.
+ * Static (prerendered). Keep in sync with checkout (src/pages/api/checkout.ts):
+ * US-only, one "Standard shipping" rate, delivery estimate 5–12 business days.
+ * If you change these terms, update `updated` below.
+ */
+import PolicyLayout from '../../layouts/PolicyLayout.astro';
+---
+
+<PolicyLayout
+  title="Shipping"
+  updated="November 12, 2026"
+  description="PawnDepot shipping: US-only, Standard shipping calculated at checkout, most orders arrive within 5–12 business days."
+>
+  <h2>Where we ship</h2>
+  <p>We currently ship to addresses in the <strong>United States</strong> only.</p>
+
+  <h2>Shipping cost</h2>
+  <p>
+    All orders ship Standard. The exact cost is calculated at checkout based on what's in your cart —
+    extra items usually cost less to ship than the first. You'll see the total before you pay.
+  </p>
+
+  <h2>How long it takes</h2>
+  <p>
+    Every item is printed after you order it. Most orders arrive within <strong>5–12 business
+    days</strong> of being placed. Items in the same order may ship separately and arrive on
+    different days.
+  </p>
+
+  <h2>Tracking</h2>
+  <p>
+    Need tracking info? Email <a href="mailto:help@pawndepot.shop">help@pawndepot.shop</a> with your
+    order number and we'll send it over.
+  </p>
+
+  <h2>Check your address</h2>
+  <p>
+    Orders go into production right after they're placed, so we can't change the shipping address
+    once an order is placed. Please double-check it at checkout.
+  </p>
+
+  <h2>Lost, late or damaged</h2>
+  <p>
+    If your order hasn't arrived 3 weeks after you placed it, or it arrives damaged, see our
+    <a href="/policies/returns">Returns &amp; Refunds</a> policy — we'll replace it.
+  </p>
+</PolicyLayout>
