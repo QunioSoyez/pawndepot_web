@@ -43,11 +43,17 @@ export interface ProductImage {
   isDefault: boolean;
 }
 
+export interface Category {
+  slug: string; // URL-safe, e.g. "tees" → /shop?type=tees
+  name: string; // shown on the filter button, e.g. "Tees"
+}
+
 export interface Product {
   id: string;
   title: string;
   descriptionHtml: string; // HTML written in Printify
   tags: string[];
+  category: Category; // product type, from Printify tags (see categoryFor)
   options: ProductOption[];
   variants: Variant[];
   images: ProductImage[];
@@ -135,6 +141,59 @@ export function getShopId(): string {
 }
 
 /* ------------------------------------------------------------------ */
+/* Categories (product types) + featured                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Printify auto-adds tags to every product. The product-TYPE tags ("T-shirts",
+ * "Hoodies", "Mugs") come from the catalog item and are reliable; most other auto
+ * tags (Glitter, Puff, Embroidery…) are noise, so we only look for the ones below.
+ * First match wins, so put more specific types first. Matching ignores case.
+ *
+ * Verified 2026-11-12 on our products: T-shirts (blueprint 12), Hoodies (77), Mugs (425).
+ * New product type showing up under "Other"? Run `node scripts/printify-admin.mjs list`
+ * to see its tags and add a rule here — or tag it "cat:<Name>" in Printify.
+ */
+const CATEGORY_RULES: { tag: string; category: Category }[] = [
+  { tag: 'Hoodies', category: { slug: 'hoodies', name: 'Hoodies' } },
+  { tag: 'T-shirts', category: { slug: 'tees', name: 'Tees' } },
+  { tag: 'Mugs', category: { slug: 'mugs', name: 'Mugs' } },
+];
+
+const OTHER: Category = { slug: 'other', name: 'Other' };
+
+/** "Tank Tops" → "tank-tops" */
+function slugify(text: string): string {
+  return text.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/**
+ * A product's type. A manual "cat:<Name>" tag added in Printify wins
+ * (e.g. "cat:Tank Tops"); otherwise the first matching CATEGORY_RULES tag; else "Other".
+ */
+function categoryFor(tags: string[]): Category {
+  const manual = tags.find((t) => /^cat:/i.test(t.trim()));
+  if (manual) {
+    const name = manual.trim().slice(4).trim();
+    const slug = slugify(name);
+    if (slug) return { slug, name };
+  }
+  const lower = new Set(tags.map((t) => t.trim().toLowerCase()));
+  return CATEGORY_RULES.find((r) => lower.has(r.tag.toLowerCase()))?.category ?? OTHER;
+}
+
+/**
+ * Home page "Featured" products, by Printify product id, in display order.
+ * (Printify's dashboard has no tags field for API stores, so the list lives here.)
+ * Get ids from `node scripts/printify-admin.mjs list`. Changing this needs a push/deploy.
+ * Ids that aren't published are skipped automatically.
+ */
+const FEATURED_PRODUCT_IDS: string[] = [
+  '6af513f88d16349ed60584b1', // People Over Money (tee)
+  '6af53e3fd39f9cf7fc06bb2f', // People Over Money (Dark) (tee)
+];
+
+/* ------------------------------------------------------------------ */
 /* Trimming                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -181,6 +240,7 @@ function trimProduct(raw: RawProduct): Product {
     title: raw.title,
     descriptionHtml: raw.description,
     tags: raw.tags,
+    category: categoryFor(raw.tags ?? []),
     options,
     variants,
     images,
@@ -230,7 +290,7 @@ let memoryCache: { products: Product[]; expires: number } | null = null;
 
 // Layer 2: Cloudflare Cache API (shared within a data center). Note: may be a no-op
 // on *.workers.dev test URLs — that's fine, layer 1 still helps. Works on pawndepot.shop.
-const CACHE_KEY = 'https://cache.pawndepot.internal/printify/products-v2'; // bump when Product shape changes
+const CACHE_KEY = 'https://cache.pawndepot.internal/printify/products-v3'; // bump when Product shape changes
 
 /** All visible products, trimmed. Cached for CACHE_SECONDS. */
 export async function getProducts(): Promise<Product[]> {
@@ -284,6 +344,33 @@ export async function confirmPublished(productId: string, productUrl: string): P
     method: 'POST',
     body: JSON.stringify({ external: { id: productId, handle: productUrl } }),
   });
+}
+
+/**
+ * Categories that have at least one product, in CATEGORY_RULES order
+ * (manual "cat:" categories after those, A–Z; "Other" last).
+ */
+export function getCategories(products: Product[]): Category[] {
+  const bySlug = new Map<string, Category>();
+  for (const p of products) bySlug.set(p.category.slug, p.category);
+  const ruleOrder = CATEGORY_RULES.map((r) => r.category.slug);
+  const rank = (c: Category) => {
+    if (c.slug === OTHER.slug) return 1000;
+    const i = ruleOrder.indexOf(c.slug);
+    return i === -1 ? 500 : i;
+  };
+  return [...bySlug.values()].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+}
+
+/**
+ * Products for the home page "Featured" section: FEATURED_PRODUCT_IDS that are
+ * published, in list order (up to `limit`). If none of them are published,
+ * the newest `limit` products instead (Printify lists newest first).
+ */
+export function getFeatured(products: Product[], limit = 4): Product[] {
+  const byId = new Map(products.map((p) => [p.id, p]));
+  const picked = FEATURED_PRODUCT_IDS.map((id) => byId.get(id)).filter((p): p is Product => Boolean(p));
+  return (picked.length ? picked : products).slice(0, limit);
 }
 
 /** One product by its Printify id, or undefined if not found / hidden. */

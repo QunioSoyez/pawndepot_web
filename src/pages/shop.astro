@@ -3,9 +3,13 @@
  * /shop — all products from Printify.
  * Rendered on each request (not at build time) so new products appear
  * without redeploying. Printify data is cached 5 min in src/lib/printify.ts.
+ *
+ * Filter by product type with ?type=<slug> (e.g. /shop?type=tees). Plain links,
+ * so filtering works without JavaScript and filtered URLs can be shared.
+ * Unknown types fall back to showing everything.
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { getProducts, formatPrice, primaryImage, type Product } from '../lib/printify';
+import { getProducts, getCategories, formatPrice, primaryImage, type Product } from '../lib/printify';
 
 export const prerender = false;
 
@@ -20,6 +24,12 @@ try {
   loadError = true;
 }
 
+const categories = getCategories(products);
+const requestedType = Astro.url.searchParams.get('type');
+const activeCategory = categories.find((c) => c.slug === requestedType);
+const shown = activeCategory ? products.filter((p) => p.category.slug === activeCategory.slug) : products;
+const countFor = (slug: string) => products.filter((p) => p.category.slug === slug).length;
+
 /** "$25.00" or "From $25.00" when sizes have different prices */
 function priceLabel(p: Product): string {
   return p.priceMin === p.priceMax ? formatPrice(p.priceMin) : `From ${formatPrice(p.priceMin)}`;
@@ -32,8 +42,35 @@ function swatches(p: Product) {
 }
 ---
 
-<BaseLayout title="Shop" description="Shop all PawnDepot merch — shirts and more, printed on demand.">
-  <h1>Shop</h1>
+<BaseLayout
+  title={activeCategory ? `${activeCategory.name} — Shop` : 'Shop'}
+  description={activeCategory
+    ? `Shop PawnDepot ${activeCategory.name.toLowerCase()} — printed on demand.`
+    : 'Shop all PawnDepot merch — shirts and more, printed on demand.'}
+>
+  <h1>{activeCategory ? activeCategory.name : 'Shop'}</h1>
+
+  {categories.length > 1 && (
+    <nav class="filters" aria-label="Product types">
+      <ul>
+        <li>
+          <a href="/shop" class:list={['filter', { active: !activeCategory }]} aria-current={!activeCategory ? 'page' : undefined}>
+            All <span class="count">{products.length}</span>
+          </a>
+        </li>
+        {categories.map((c) => {
+          const isActive = activeCategory?.slug === c.slug;
+          return (
+            <li>
+              <a href={`/shop?type=${c.slug}`} class:list={['filter', { active: isActive }]} aria-current={isActive ? 'page' : undefined}>
+                {c.name} <span class="count">{countFor(c.slug)}</span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  )}
 
   {loadError && (
     <p class="notice">Our product shelf is being restocked — please check back in a few minutes.</p>
@@ -43,9 +80,9 @@ function swatches(p: Product) {
     <p class="notice">No products yet — new merch is on the way!</p>
   )}
 
-  {products.length > 0 && (
+  {shown.length > 0 && (
     <ul class="product-grid">
-      {products.map((p) => {
+      {shown.map((p) => {
         const img = primaryImage(p);
         const colors = swatches(p);
         return (
@@ -79,6 +116,52 @@ function swatches(p: Product) {
 </BaseLayout>
 
 <style>
+  .filters ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    list-style: none;
+    margin: 0 0 var(--gap);
+    padding: 0;
+  }
+
+  .filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.95rem;
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    background: var(--white);
+    color: var(--ink);
+    font-family: var(--font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .filter:hover {
+    border-color: var(--depot-red);
+    color: var(--depot-red);
+  }
+
+  .filter.active {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--white);
+  }
+
+  .count {
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    color: var(--steel);
+  }
+
+  .filter.active .count {
+    color: var(--rail);
+  }
+
   .notice {
     padding: 1rem 1.25rem;
     background: var(--white);
