@@ -53,6 +53,8 @@ export interface Product {
   images: ProductImage[];
   priceMin: number; // cents — lowest price among available variants ("from $X")
   priceMax: number; // cents
+  blueprintId: number;     // Printify catalog item (e.g. 12 = Bella+Canvas 3001)
+  printProviderId: number; // who prints it — needed for shipping rates + orders
 }
 
 /* ------------------------------------------------------------------ */
@@ -66,6 +68,8 @@ interface RawProduct {
   tags: string[];
   visible: boolean;
   is_deleted?: boolean;
+  blueprint_id: number;
+  print_provider_id: number;
   options: { name: string; type: string; values: { id: number; title: string; colors?: string[] }[] }[];
   variants: {
     id: number;
@@ -176,6 +180,8 @@ function trimProduct(raw: RawProduct): Product {
     images,
     priceMin: prices.length ? Math.min(...prices) : 0,
     priceMax: prices.length ? Math.max(...prices) : 0,
+    blueprintId: raw.blueprint_id,
+    printProviderId: raw.print_provider_id,
   };
 }
 
@@ -206,7 +212,7 @@ let memoryCache: { products: Product[]; expires: number } | null = null;
 
 // Layer 2: Cloudflare Cache API (shared within a data center). Note: may be a no-op
 // on *.workers.dev test URLs — that's fine, layer 1 still helps. Works on pawndepot.shop.
-const CACHE_KEY = 'https://cache.pawndepot.internal/printify/products-v1';
+const CACHE_KEY = 'https://cache.pawndepot.internal/printify/products-v2'; // bump when Product shape changes
 
 /** All visible products, trimmed. Cached for CACHE_SECONDS. */
 export async function getProducts(): Promise<Product[]> {
@@ -257,4 +263,68 @@ export function formatPrice(cents: number): string {
 /** Best image to show for a product card (default mockup, else first). */
 export function primaryImage(product: Product): ProductImage | undefined {
   return product.images.find((i) => i.isDefault) ?? product.images[0];
+}
+
+/* ------------------------------------------------------------------ */
+/* Shipping cost (asks Printify to price the actual cart)             */
+/* ------------------------------------------------------------------ */
+
+export interface ShippingLine {
+  productId: string;
+  variantId: number;
+  quantity: number;
+}
+
+interface ShippingQuote {
+  standard?: number;
+  economy?: number;
+  express?: number;
+  priority?: number;
+  printify_express?: number;
+}
+
+// Printify needs an address to price shipping, but Stripe collects the real one
+// on its checkout page. Standard US rates are the same nationwide, so we quote
+// against a fixed placeholder US address. (Revisit if we ship outside the US.)
+const QUOTE_ADDRESS_US = {
+  first_name: 'Rate',
+  last_name: 'Quote',
+  email: 'quote@pawndepot.shop',
+  phone: '0000000000',
+  country: 'US',
+  region: 'NC',
+  address1: '100 Main St',
+  city: 'Raleigh',
+  zip: '27601',
+};
+
+const quoteCache = new Map<string, { cents: number; expires: number }>();
+
+/**
+ * Standard shipping in cents for a cart (US), exactly as Printify will charge us.
+ * Uses Printify's "calculate shipping" endpoint, so multi-item discounts are applied
+ * by Printify itself. Cached 10 min per unique cart.
+ */
+export async function quoteStandardShippingUS(lines: ShippingLine[]): Promise<number> {
+  const key = lines
+    .map((l) => `${l.productId}:${l.variantId}:${l.quantity}`)
+    .sort()
+    .join('|');
+  const hit = quoteCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.cents;
+
+  const quote = await printifyFetch<ShippingQuote>(`/shops/${getShopId()}/orders/shipping.json`, {
+    method: 'POST',
+    body: JSON.stringify({
+      line_items: lines.map((l) => ({ product_id: l.productId, variant_id: l.variantId, quantity: l.quantity })),
+      address_to: QUOTE_ADDRESS_US,
+    }),
+  });
+
+  if (typeof quote.standard !== 'number') {
+    throw new Error(`Printify shipping quote had no standard rate: ${JSON.stringify(quote).slice(0, 200)}`);
+  }
+
+  quoteCache.set(key, { cents: quote.standard, expires: Date.now() + 10 * 60 * 1000 });
+  return quote.standard;
 }

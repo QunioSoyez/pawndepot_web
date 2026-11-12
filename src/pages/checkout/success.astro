@@ -1,0 +1,221 @@
+---
+/**
+ * /checkout/success?session_id=cs_...
+ * Stripe sends shoppers here after paying. We look the session up with Stripe
+ * (server side) to confirm it's really paid before showing the receipt and
+ * clearing the cart. The Printify order itself is created by the webhook, not here.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { env } from 'cloudflare:workers';
+import Stripe from 'stripe';
+import { formatPrice } from '../../lib/printify';
+
+export const prerender = false;
+
+// Receipts are private — never cache this page
+Astro.response.headers.set('Cache-Control', 'no-store');
+
+const sessionId = Astro.url.searchParams.get('session_id') ?? '';
+const stripeKey = (env as unknown as { STRIPE_SECRET_KEY?: string }).STRIPE_SECRET_KEY;
+
+let session: Stripe.Checkout.Session | null = null;
+
+if (stripeKey && /^cs_[A-Za-z0-9_]{10,250}$/.test(sessionId)) {
+  try {
+    const stripe = new Stripe(stripeKey);
+    session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ['line_items'] });
+  } catch (err) {
+    console.error('[success] Could not retrieve session', err);
+  }
+}
+
+const paid = session?.payment_status === 'paid';
+if (!paid) Astro.response.status = 404;
+
+// Shipping details moved in newer Stripe API versions — check both spots
+type ShipDetails = { name?: string | null; address?: Stripe.Address | null } | null | undefined;
+const s = session as unknown as {
+  collected_information?: { shipping_details?: ShipDetails };
+  shipping_details?: ShipDetails;
+} | null;
+const shipping = s?.collected_information?.shipping_details ?? s?.shipping_details ?? null;
+
+const lines = session?.line_items?.data ?? [];
+const shippingCents = session?.total_details?.amount_shipping ?? 0;
+const taxCents = session?.total_details?.amount_tax ?? 0;
+const totalCents = session?.amount_total ?? 0;
+const email = session?.customer_details?.email;
+const orderRef = session ? session.id.slice(-8).toUpperCase() : '';
+---
+
+<BaseLayout title={paid ? 'Thank you!' : 'Order not found'}>
+  {paid ? (
+    <section class="success" data-paid>
+      <p class="kicker">Order #{orderRef}</p>
+      <h1>All aboard — thank you!</h1>
+      <p class="lead">
+        Your payment went through{email && <> and a receipt is on its way to <strong>{email}</strong></>}.
+      </p>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Your order</h2>
+          <ul class="lines">
+            {lines.map((li) => (
+              <li>
+                <span>
+                  {li.quantity} × {li.description}
+                </span>
+                <span>{formatPrice(li.amount_total)}</span>
+              </li>
+            ))}
+          </ul>
+          <dl class="totals">
+            <div><dt>Shipping</dt><dd>{formatPrice(shippingCents)}</dd></div>
+            {taxCents > 0 && <div><dt>Tax</dt><dd>{formatPrice(taxCents)}</dd></div>}
+            <div class="grand"><dt>Total</dt><dd>{formatPrice(totalCents)}</dd></div>
+          </dl>
+        </div>
+
+        <div class="card">
+          <h2>What happens next</h2>
+          <ol class="steps">
+            <li><strong>Printing:</strong> your items are made to order, just for you.</li>
+            <li><strong>Shipping:</strong> most orders arrive in about 5–12 business days.</li>
+            <li><strong>Tracking:</strong> we'll email you when it ships.</li>
+          </ol>
+          {shipping?.address && (
+            <p class="ship-to">
+              Shipping to <strong>{shipping.name}</strong>
+              <br />
+              {shipping.address.city}, {shipping.address.state} {shipping.address.postal_code}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <a href="/shop" class="btn">Keep shopping</a>
+    </section>
+  ) : (
+    <section class="notice">
+      <h1>We couldn't find that order</h1>
+      <p>
+        If you just paid, check your email for a receipt from Stripe — your order is safe.
+        Otherwise, your cart is still waiting for you.
+      </p>
+      <div class="actions">
+        <a href="/cart" class="btn">Back to cart</a>
+        <a href="/shop" class="btn btn--outline">Shop</a>
+      </div>
+    </section>
+  )}
+</BaseLayout>
+
+<script>
+  // Payment confirmed → empty the cart (badge updates automatically)
+  import { clearCart } from '../../lib/cart';
+  if (document.querySelector('[data-paid]')) clearCart();
+</script>
+
+<style>
+  .kicker {
+    margin: 0 0 0.25rem;
+    font-family: var(--font-heading);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--depot-red);
+  }
+
+  .lead {
+    font-size: 1.15rem;
+    color: var(--steel);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--gap);
+    margin: 1.5rem 0 2rem;
+  }
+
+  .card {
+    padding: 1.25rem;
+    background: var(--white);
+    border: 1px solid var(--rail);
+    border-top: 4px solid var(--depot-red);
+    border-radius: var(--radius);
+  }
+
+  .card h2 {
+    font-size: 1.3rem;
+  }
+
+  .lines {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+  }
+
+  .lines li,
+  .totals div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.35rem 0;
+  }
+
+  .lines li {
+    border-bottom: 1px solid var(--rail);
+  }
+
+  .totals {
+    margin: 0;
+  }
+
+  .totals dt {
+    color: var(--steel);
+  }
+
+  .totals dd {
+    margin: 0;
+  }
+
+  .grand {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+
+  .grand dt {
+    color: var(--ink);
+  }
+
+  .steps {
+    padding-left: 1.2rem;
+    margin: 0 0 1rem;
+  }
+
+  .steps li {
+    margin-bottom: 0.4rem;
+  }
+
+  .ship-to {
+    margin: 0;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--rail);
+    color: var(--steel);
+  }
+
+  .notice {
+    max-width: 560px;
+    padding: 2rem;
+    background: var(--white);
+    border-left: 4px solid var(--depot-red);
+    border-radius: var(--radius);
+  }
+
+  .actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+</style>

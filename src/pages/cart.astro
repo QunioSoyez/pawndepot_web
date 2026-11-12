@@ -2,7 +2,7 @@
 /**
  * /cart — shows the browser cart (src/lib/cart.ts).
  * The page itself is static; items are drawn in the browser from localStorage.
- * Checkout button is wired to Stripe in a later step.
+ * Checkout button posts the cart to /api/checkout, then redirects to Stripe.
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
 ---
@@ -26,7 +26,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <strong data-subtotal>$0.00</strong>
       </div>
       <p class="fine">Shipping and any sales tax are calculated at checkout.</p>
-      <button type="button" class="btn checkout-btn" data-checkout disabled>Checkout (coming soon)</button>
+      <div class="checkout-error" data-checkout-error role="alert" hidden></div>
+      <button type="button" class="btn checkout-btn" data-checkout>Checkout</button>
+      <p class="secure">Secure payment by Stripe</p>
       <a href="/shop" class="keep-shopping">← Keep shopping</a>
     </aside>
   </div>
@@ -52,7 +54,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 </BaseLayout>
 
 <script>
-  import { onCartChange, setQuantity, removeItem, MAX_QTY_PER_ITEM, type CartItem } from '../lib/cart';
+  import { onCartChange, setQuantity, removeItem, getCart, MAX_QTY_PER_ITEM, type CartItem } from '../lib/cart';
 
   const fmt = (c: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(c / 100);
 
@@ -61,6 +63,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   const listEl = document.querySelector<HTMLUListElement>('[data-items]')!;
   const subtotalEl = document.querySelector<HTMLElement>('[data-subtotal]')!;
   const template = document.getElementById('cart-item-template') as HTMLTemplateElement;
+  const checkoutBtn = document.querySelector<HTMLButtonElement>('[data-checkout]')!;
+  const errorEl = document.querySelector<HTMLElement>('[data-checkout-error]')!;
 
   function renderItem(item: CartItem): HTMLLIElement {
     const li = (template.content.firstElementChild as HTMLLIElement).cloneNode(true) as HTMLLIElement;
@@ -95,6 +99,61 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     cartEl.hidden = !hasItems;
     listEl.replaceChildren(...items.map(renderItem));
     subtotalEl.textContent = fmt(items.reduce((s, i) => s + i.price * i.quantity, 0));
+    errorEl.hidden = true; // cart changed — clear old checkout errors
+  });
+
+  // --- Checkout ---
+
+  function showError(message: string, problems: string[] = []) {
+    errorEl.replaceChildren();
+    const p = document.createElement('p');
+    p.textContent = message;
+    errorEl.append(p);
+    if (problems.length) {
+      const ul = document.createElement('ul');
+      for (const msg of problems) {
+        const li = document.createElement('li');
+        li.textContent = msg;
+        ul.append(li);
+      }
+      errorEl.append(ul);
+    }
+    errorEl.hidden = false;
+  }
+
+  checkoutBtn.addEventListener('click', async () => {
+    const items = getCart().map(({ productId, variantId, quantity }) => ({ productId, variantId, quantity }));
+    if (!items.length) return;
+
+    checkoutBtn.disabled = true;
+    checkoutBtn.textContent = 'Taking you to checkout…';
+    errorEl.hidden = true;
+
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string; problems?: string[] };
+
+      if (res.ok && data.url) {
+        window.location.href = data.url; // off to Stripe
+        return; // keep the button in its "loading" state while the page changes
+      }
+      showError(data.error ?? 'Something went wrong. Please try again.', data.problems);
+    } catch {
+      showError('Couldn’t reach the store. Check your connection and try again.');
+    }
+
+    checkoutBtn.disabled = false;
+    checkoutBtn.textContent = 'Checkout';
+  });
+
+  // If the shopper comes BACK from Stripe (browser back button), reset the button
+  window.addEventListener('pageshow', () => {
+    checkoutBtn.disabled = false;
+    checkoutBtn.textContent = 'Checkout';
   });
 </script>
 
@@ -247,6 +306,32 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   .checkout-btn {
     width: 100%;
+  }
+
+  .checkout-error {
+    margin-bottom: 0.9rem;
+    padding: 0.75rem 0.9rem;
+    border-left: 4px solid var(--depot-red);
+    background: #fdecec;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+  }
+
+  .checkout-error :global(p) {
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .checkout-error :global(ul) {
+    margin: 0.4rem 0 0;
+    padding-left: 1.1rem;
+  }
+
+  .secure {
+    margin: 0.5rem 0 0;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--steel);
   }
 
   .keep-shopping {
