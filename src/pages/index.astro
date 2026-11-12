@@ -1,16 +1,104 @@
 ---
+/**
+ * Home page.
+ * TEMPORARY content so we can see the layout, colors and fonts.
+ * Featured products from Printify will replace the sample section later.
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+<BaseLayout>
+  <section class="hero">
+    <img class="hero-logo" src="/logo.svg" alt="PawnDepot logo: a chess pawn in front of a red train depot" width="320" height="320" />
+    <div class="hero-text">
+      <h1>All aboard the <span class="accent">PawnDepot</span></h1>
+      <p class="lead">Custom merch, printed on demand and shipped to your door.</p>
+      <div class="hero-actions">
+        <a href="/shop" class="btn">Shop now</a>
+        <a href="/about" class="btn btn--outline">About us</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Placeholder: featured products will load from Printify here -->
+  <section class="featured">
+    <h2>Featured</h2>
+    <div class="placeholder-grid">
+      {[1, 2, 3].map((n) => (
+        <div class="placeholder-card">
+          <div class="placeholder-img" aria-hidden="true"></div>
+          <h3>Sample product {n}</h3>
+          <p class="price">$24.99</p>
+        </div>
+      ))}
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .hero {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 2.5rem;
+    padding: 1rem 0 3rem;
+  }
+
+  .hero-logo {
+    width: clamp(180px, 28vw, 320px);
+  }
+
+  .accent {
+    color: var(--depot-red);
+  }
+
+  .lead {
+    font-size: 1.2rem;
+    color: var(--steel);
+    max-width: 32ch;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 1.5rem;
+  }
+
+  .placeholder-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--gap);
+  }
+
+  .placeholder-card {
+    background: var(--white);
+    border: 1px solid var(--rail);
+    border-radius: var(--radius);
+    padding: 1rem;
+  }
+
+  .placeholder-img {
+    aspect-ratio: 1;
+    margin-bottom: 0.75rem;
+    border-radius: var(--radius);
+    background: repeating-linear-gradient(45deg, var(--paper), var(--paper) 10px, var(--rail) 10px, var(--rail) 20px);
+  }
+
+  .price {
+    font-weight: 700;
+    color: var(--depot-red);
+    margin: 0;
+  }
+
+  @media (max-width: 700px) {
+    .hero {
+      grid-template-columns: 1fr;
+      text-align: center;
+      justify-items: center;
+    }
+    .hero-actions {
+      justify-content: center;
+    }
+  }
+</style>

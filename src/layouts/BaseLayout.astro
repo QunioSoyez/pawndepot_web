@@ -1,0 +1,272 @@
+---
+/**
+ * BaseLayout — wraps every page with <head>, header (logo + nav) and footer.
+ *
+ * Usage:
+ *   <BaseLayout title="Shop" description="All PawnDepot products">
+ *     ...page content...
+ *   </BaseLayout>
+ */
+
+// Self-hosted fonts (bundled with the site — no Google Fonts requests)
+import '@fontsource/oswald/500.css';
+import '@fontsource/oswald/700.css';
+import '@fontsource-variable/inter';
+
+// Site-wide styles (colors, type, buttons)
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const SITE_NAME = 'PawnDepot';
+const {
+  title,
+  description = 'PawnDepot — custom merch, printed on demand and shipped to your door.',
+} = Astro.props;
+
+// "Shop | PawnDepot", or just "PawnDepot" on the home page
+const pageTitle = title ? `${title} | ${SITE_NAME}` : SITE_NAME;
+const year = new Date().getFullYear();
+
+// Highlight the current section in the nav
+const path = Astro.url.pathname;
+const isActive = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
+
+const navLinks = [
+  { href: '/shop', label: 'Shop' },
+  { href: '/about', label: 'About' },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+
+    <!-- Favicons: SVG for modern browsers, ICO fallback -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+
+    <!-- Link previews (Facebook, iMessage, Discord, etc.) -->
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content={new URL('/logo.png', Astro.url).href} />
+    <meta name="theme-color" content="#ce2223" />
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="container header-inner">
+        <a href="/" class="brand" aria-label="PawnDepot home">
+          <img src="/logo.svg" alt="" width="56" height="56" />
+          <span class="brand-name">Pawn<span class="brand-accent">Depot</span></span>
+        </a>
+
+        <nav aria-label="Main">
+          <ul class="nav-list">
+            {navLinks.map((link) => (
+              <li>
+                <a
+                  href={link.href}
+                  class:list={['nav-link', { active: isActive(link.href) }]}
+                  aria-current={isActive(link.href) ? 'page' : undefined}
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+            <li>
+              <a href="/cart" class:list={['nav-link', 'cart-link', { active: isActive('/cart') }]}>
+                Cart
+                <!-- Count is filled in by the cart script (added in a later step) -->
+                <span class="cart-count" data-cart-count hidden>0</span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <div class="container">
+        <slot />
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <div class="footer-brand">
+          <img src="/logo.svg" alt="" width="40" height="40" />
+          <span>© {year} PawnDepot</span>
+        </div>
+        <nav aria-label="Policies">
+          <ul class="footer-links">
+            <li><a href="/policies/shipping">Shipping</a></li>
+            <li><a href="/policies/returns">Returns</a></li>
+            <li><a href="/policies/privacy">Privacy</a></li>
+          </ul>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  /* --- Skip link (keyboard users) --- */
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0.5rem;
+    z-index: 100;
+    padding: 0.5rem 1rem;
+    background: var(--ink);
+    color: var(--white);
+  }
+  .skip-link:focus {
+    left: 0.5rem;
+  }
+
+  /* --- Header --- */
+  .site-header {
+    background: var(--paper);
+    border-bottom: 4px solid var(--depot-red);
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    text-decoration: none;
+    color: var(--ink);
+  }
+
+  .brand-name {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 1.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .brand-accent {
+    color: var(--depot-red);
+  }
+
+  .nav-list {
+    display: flex;
+    gap: 0.25rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.85rem;
+    border-radius: var(--radius);
+    color: var(--ink);
+    font-family: var(--font-heading);
+    font-weight: 500;
+    font-size: 1.1rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-decoration: none;
+  }
+
+  .nav-link:hover {
+    background: var(--ink);
+    color: var(--white);
+  }
+
+  .nav-link.active {
+    color: var(--depot-red);
+  }
+
+  .nav-link.active:hover {
+    color: var(--white);
+  }
+
+  .cart-count {
+    min-width: 1.5em;
+    padding: 0 0.4em;
+    border-radius: 999px;
+    background: var(--depot-red);
+    color: var(--white);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.5em;
+    text-align: center;
+  }
+
+  /* --- Footer --- */
+  .site-footer {
+    background: var(--ink);
+    color: var(--paper);
+    border-top: 4px solid var(--depot-red);
+    padding: 1.5rem 0;
+    font-size: 0.9rem;
+  }
+
+  .footer-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .footer-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 1.25rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .footer-links a {
+    color: var(--paper);
+  }
+
+  .footer-links a:hover {
+    color: var(--depot-red);
+  }
+
+  /* --- Small screens --- */
+  @media (max-width: 560px) {
+    .brand-name {
+      font-size: 1.4rem;
+    }
+    .header-inner {
+      justify-content: center;
+    }
+  }
+</style>
