@@ -1,0 +1,71 @@
+---
+/**
+ * /policies/privacy — Privacy policy.
+ * Static (prerendered). Written from what the code actually does (2026-11-12):
+ * - Stripe Checkout collects name, email, phone, shipping address, payment (card never reaches us)
+ * - stripe-webhook.ts sends name, email, phone, address to Printify (address_to)
+ * - cart = browser localStorage only; no analytics/ad cookies in our code; fonts self-hosted
+ * - product images load from Printify's image servers; Cloudflare observability logs on
+ * If any of that changes (analytics, newsletter, new processor), update this page + `updated`.
+ */
+import PolicyLayout from '../../layouts/PolicyLayout.astro';
+---
+
+<PolicyLayout
+  title="Privacy"
+  updated="November 12, 2026"
+  description="PawnDepot privacy policy: what we collect, why, who we share it with, and your choices."
+>
+  <h2>The short version</h2>
+  <p>
+    We collect only what we need to get your order to you. We don't sell your information, and we
+    don't use ad trackers.
+  </p>
+
+  <h2>What we collect</h2>
+  <p>
+    When you check out, our payment processor Stripe collects your name, email, phone number,
+    shipping address and payment details. We never see or store your full card number.
+  </p>
+
+  <h2>How we use it</h2>
+  <p>To make, ship and support your order, and to contact you about it. We don't send marketing emails.</p>
+
+  <h2>Who we share it with</h2>
+  <ul>
+    <li>
+      <strong>Stripe</strong> — processes your payment (see <a href="https://stripe.com/privacy" target="_blank" rel="noopener">Stripe's privacy policy</a>).
+    </li>
+    <li>
+      <strong>Printify and their print partners and shipping carriers</strong> — receive your name,
+      email, phone and shipping address to make and deliver your order.
+    </li>
+    <li>
+      <strong>Cloudflare</strong> — hosts our site and keeps short-term technical logs (like IP
+      address and pages requested) for security and troubleshooting.
+    </li>
+  </ul>
+  <p>We don't sell or rent your personal information.</p>
+
+  <h2>Cookies and your cart</h2>
+  <p>
+    Our site doesn't use advertising or analytics cookies. Your cart is saved in your own browser on
+    your device, and you can clear it anytime. Stripe's checkout page may use its own cookies to
+    process payments securely and prevent fraud.
+  </p>
+
+  <h2>How long we keep it</h2>
+  <p>We keep order records as long as needed for orders, support, and tax and accounting records.</p>
+
+  <h2>Your choices</h2>
+  <p>
+    Email <a href="mailto:help@pawndepot.shop">help@pawndepot.shop</a> to ask what we have about you,
+    or to correct or delete it. We may need to keep some records the law requires.
+  </p>
+
+  <h2>Children</h2>
+  <p>PawnDepot isn't directed at children under 13, and we don't knowingly collect their information.</p>
+
+  <h2>Changes</h2>
+  <p>If we update this policy, we'll change the "Last updated" date above.</p>
+</PolicyLayout>
