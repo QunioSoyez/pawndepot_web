@@ -88,7 +88,7 @@ const navLinks = [
             <li>
               <a href="/cart" class:list={['nav-link', 'cart-link', { active: isActive('/cart') }]}>
                 Cart
-                <!-- Count is filled in by the cart script (added in a later step) -->
+                <!-- Count is filled in by the cart script at the bottom of this file -->
                 <span class="cart-count" data-cart-count hidden>0</span>
               </a>
             </li>
@@ -120,6 +120,23 @@ const navLinks = [
     </footer>
   </body>
 </html>
+
+<script>
+  // Keep the header cart badge in sync with the cart (this tab + other tabs)
+  import { onCartChange } from '../lib/cart';
+
+  const badge = document.querySelector<HTMLElement>('[data-cart-count]');
+  const cartLink = document.querySelector<HTMLAnchorElement>('.cart-link');
+
+  onCartChange((items) => {
+    const count = items.reduce((sum, i) => sum + i.quantity, 0);
+    if (badge) {
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.hidden = count === 0;
+    }
+    cartLink?.setAttribute('aria-label', count ? `Cart, ${count} item${count === 1 ? '' : 's'}` : 'Cart, empty');
+  });
+</script>
 
 <style>
   /* --- Skip link (keyboard users) --- */

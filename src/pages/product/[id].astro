@@ -3,7 +3,7 @@
  * /product/<printify-id> — product detail page.
  * Server side: loads the product from Printify (cached).
  * Browser side: option pickers (color/size/etc.), photo swap, price + stock status.
- * "Add to cart" is wired up in the cart step.
+ * "Add to cart" saves the chosen variant via src/lib/cart.ts.
  */
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getProduct, formatPrice, primaryImage, type Product } from '../../lib/printify';
@@ -64,6 +64,7 @@ const description = product
       <!-- Photos -->
       <div class="gallery">
         <div class="main-img">
+          <p class="photo-note" data-photo-note hidden>Photo shows a different color</p>
           {mainImage && (
             <img src={mainImage.src} alt={product.title} width="800" height="800" data-main-img />
           )}
@@ -117,7 +118,10 @@ const description = product
 
         <p class="stock" data-stock aria-live="polite"></p>
 
-        <button type="button" class="btn add-btn" data-add-to-cart disabled>Add to cart</button>
+        <div class="add-row">
+          <button type="button" class="btn add-btn" data-add-to-cart disabled>Add to cart</button>
+          <a href="/cart" class="view-cart" data-view-cart hidden>View cart →</a>
+        </div>
 
         <div class="description" set:html={product.descriptionHtml} />
       </div>
@@ -129,6 +133,8 @@ const description = product
 
 <script>
   // Runs in the browser. Keeps the page in sync with the chosen options.
+  import { addItem } from '../../lib/cart';
+
   type OptionValue = { id: number; title: string };
   type Variant = { id: number; title: string; price: number; available: boolean; options: number[] };
   type Img = { src: string; variantIds: number[] };
@@ -146,6 +152,7 @@ const description = product
     const addBtn = page.querySelector<HTMLButtonElement>('[data-add-to-cart]')!;
     const mainImg = page.querySelector<HTMLImageElement>('[data-main-img]');
     const fieldsets = [...page.querySelectorAll<HTMLFieldSetElement>('fieldset[data-option-type]')];
+    const photoNote = page.querySelector<HTMLElement>('[data-photo-note]');
 
     // selected[optionIndex] = value id (option order matches data.options / fieldsets)
     const selected: (number | null)[] = data.options.map(() => null);
@@ -200,8 +207,15 @@ const description = product
       addBtn.disabled = !variant.available;
       addBtn.dataset.variantId = String(variant.id);
 
-      const img = data.images.find((im) => im.variantIds.includes(variant.id));
+      // Photo: exact variant first, then any variant with the same color, else keep current + show note
+      const colorIdx = data.options.findIndex((o) => o.type === 'color');
+      const colorId = colorIdx >= 0 ? selected[colorIdx] : null;
+      const sameColorIds = colorId === null ? [] : data.variants.filter((v) => v.options.includes(colorId)).map((v) => v.id);
+      const img =
+        data.images.find((im) => im.variantIds.includes(variant.id)) ??
+        data.images.find((im) => im.variantIds.some((vid) => sameColorIds.includes(vid)));
       if (img) showImage(img.src);
+      if (photoNote) photoNote.hidden = !!img || colorId === null;
     }
 
     // Option clicks
@@ -219,13 +233,27 @@ const description = product
       t.addEventListener('click', () => showImage(t.dataset.thumb!)),
     );
 
-    // Add to cart — placeholder until the cart step
+    // Add to cart
+    const viewCart = page.querySelector<HTMLElement>('[data-view-cart]');
+    let resetTimer: ReturnType<typeof setTimeout> | undefined;
+
     addBtn.addEventListener('click', () => {
       const variant = findVariant(selected);
-      if (!variant) return;
-      document.dispatchEvent(new CustomEvent('pawndepot:add-to-cart', { detail: { productId: data.id, variantId: variant.id } }));
-      addBtn.textContent = 'Cart coming soon!';
-      setTimeout(() => (addBtn.textContent = 'Add to cart'), 1500);
+      if (!variant || !variant.available) return;
+
+      addItem({
+        productId: data.id,
+        variantId: variant.id,
+        title: data.title,
+        variantTitle: variant.title,
+        price: variant.price,
+        image: mainImg?.src,
+      });
+
+      addBtn.textContent = 'Added ✓';
+      if (viewCart) viewCart.hidden = false;
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => (addBtn.textContent = 'Add to cart'), 1500);
     });
 
     render();
@@ -255,6 +283,22 @@ const description = product
     border: 1px solid var(--rail);
     border-radius: var(--radius);
     overflow: hidden;
+  }
+
+  .main-img {
+    position: relative;
+  }
+
+  .photo-note {
+    position: absolute;
+    left: 0.75rem;
+    bottom: 0.75rem;
+    margin: 0;
+    padding: 0.3rem 0.65rem;
+    border-radius: var(--radius);
+    background: rgba(17, 17, 17, 0.8);
+    color: var(--white);
+    font-size: 0.85rem;
   }
 
   .main-img img {
@@ -386,10 +430,25 @@ const description = product
     font-weight: 600;
   }
 
-  .add-btn {
-    width: 100%;
-    max-width: 360px;
+  .add-row {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
     margin-bottom: 2rem;
+  }
+
+  .add-btn {
+    flex: 0 1 300px; /* leaves room for "View cart" beside it */
+  }
+
+  .view-cart {
+    font-family: var(--font-heading);
+    font-size: 1.1rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
   }
 
   .description {
