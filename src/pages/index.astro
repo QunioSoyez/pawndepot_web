@@ -1,10 +1,25 @@
 ---
 /**
- * Home page.
- * TEMPORARY content so we can see the layout, colors and fonts.
- * Featured products from Printify will replace the sample section later.
+ * Home page — hero + "Featured" products.
+ * Featured = FEATURED_PRODUCT_IDS in src/lib/printify.ts (see getFeatured()).
+ * Rendered on each request so Printify changes show without redeploying
+ * (Printify data is cached 5 min). If Printify fails or there are no products,
+ * the Featured section is simply hidden — the hero still works.
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
+import ProductGrid from '../components/ProductGrid.astro';
+import { getProducts, getFeatured, type Product } from '../lib/printify';
+
+export const prerender = false;
+
+let featured: Product[] = [];
+
+try {
+  featured = getFeatured(await getProducts());
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`[home] Failed to load featured products: ${message}`, err);
+}
 ---
 
 <BaseLayout>
@@ -20,19 +35,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </div>
   </section>
 
-  <!-- Placeholder: featured products will load from Printify here -->
-  <section class="featured">
-    <h2>Featured</h2>
-    <div class="placeholder-grid">
-      {[1, 2, 3].map((n) => (
-        <div class="placeholder-card">
-          <div class="placeholder-img" aria-hidden="true"></div>
-          <h3>Sample product {n}</h3>
-          <p class="price">$24.99</p>
-        </div>
-      ))}
-    </div>
-  </section>
+  {featured.length > 0 && (
+    <section class="featured">
+      <div class="featured-head">
+        <h2>Featured</h2>
+        <a href="/shop" class="see-all">See all products →</a>
+      </div>
+      <ProductGrid products={featured} headingLevel={3} />
+    </section>
+  )}
 </BaseLayout>
 
 <style>
@@ -65,30 +76,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     margin-top: 1.5rem;
   }
 
-  .placeholder-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: var(--gap);
+  .featured-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
   }
 
-  .placeholder-card {
-    background: var(--white);
-    border: 1px solid var(--rail);
-    border-radius: var(--radius);
-    padding: 1rem;
-  }
-
-  .placeholder-img {
-    aspect-ratio: 1;
-    margin-bottom: 0.75rem;
-    border-radius: var(--radius);
-    background: repeating-linear-gradient(45deg, var(--paper), var(--paper) 10px, var(--rail) 10px, var(--rail) 20px);
-  }
-
-  .price {
-    font-weight: 700;
-    color: var(--depot-red);
-    margin: 0;
+  .see-all {
+    font-family: var(--font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   @media (max-width: 700px) {
