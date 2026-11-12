@@ -9,7 +9,7 @@
 
 <p align="center">
   Custom merch, printed on demand and shipped to your door.<br />
-  <a href="https://pawndepot.shop">pawndepot.shop</a>
+  <a href="https://pawndepot.shop">pawndepot.shop</a> · <a href="mailto:help@pawndepot.shop">help@pawndepot.shop</a>
 </p>
 
 ---
@@ -18,8 +18,6 @@ PawnDepot is a small drop-ship store. Products are designed and managed in
 [Printify](https://printify.com); this repo is the custom storefront that sells them.
 Shoppers browse and pay on the site (via Stripe Checkout), and paid orders are sent to
 Printify automatically to be printed and shipped.
-
-> The upside-down pawn is intentional. 🙃
 
 ## How it works
 
@@ -128,6 +126,9 @@ Worker in production. They never go in the repo.
 Every push to `main` builds and deploys automatically through Cloudflare Workers Builds
 (`npm run build` → `npx wrangler deploy`).
 
+Live at **https://pawndepot.shop** (and `www.pawndepot.shop`) — both are custom domains
+on the `pawndepot` Worker. The test URL `pawndepot.michaelbarnes0.workers.dev` still works.
+
 ## Commands
 
 | Command | Action |
@@ -137,3 +138,7 @@ Every push to `main` builds and deploys automatically through Cloudflare Workers
 | `npm run build` | Build the production site to `./dist/` |
 | `npm run preview` | Preview the build locally |
 | `npm run generate-types` | Regenerate Cloudflare env types (`wrangler types`) |
+
+## Contact
+
+Questions about an order? Email **[help@pawndepot.shop](mailto:help@pawndepot.shop)**.
