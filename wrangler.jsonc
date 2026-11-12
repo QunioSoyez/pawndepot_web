@@ -8,6 +8,10 @@
 		"directory": "./dist",
 		"binding": "ASSETS"
 	},
+	// Non-secret settings (secrets like PRINTIFY_API_TOKEN go in .dev.vars locally / Cloudflare secrets in prod)
+	"vars": {
+		"PRINTIFY_SHOP_ID": "29715882"
+	},
 	"observability": {
 		"enabled": true
 	}
