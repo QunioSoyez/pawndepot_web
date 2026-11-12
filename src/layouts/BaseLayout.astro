@@ -107,7 +107,10 @@ const navLinks = [
       <div class="container footer-inner">
         <div class="footer-brand">
           <img src="/logo-pawn-white.svg" alt="" width="40" height="40" />
-          <span>© {year} PawnDepot</span>
+          <div class="footer-meta">
+            <span>© {year} PawnDepot</span>
+            <a class="footer-email" href="mailto:help@pawndepot.shop">help@pawndepot.shop</a>
+          </div>
         </div>
         <nav aria-label="Policies">
           <ul class="footer-links">
@@ -259,6 +262,20 @@ const navLinks = [
     display: flex;
     align-items: center;
     gap: 0.75rem;
+  }
+
+  .footer-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .footer-email {
+    color: var(--paper);
+  }
+
+  .footer-email:hover {
+    color: var(--depot-red);
   }
 
   .footer-links {
