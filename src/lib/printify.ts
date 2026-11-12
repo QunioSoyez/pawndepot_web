@@ -68,6 +68,10 @@ interface RawProduct {
   tags: string[];
   visible: boolean;
   is_deleted?: boolean;
+  /** true from the moment "Publish" is clicked until we confirm publishing */
+  is_locked?: boolean;
+  /** filled in once publishing is confirmed (publishing_succeeded) */
+  external?: { id?: string; handle?: string } | null;
   blueprint_id: number;
   print_provider_id: number;
   options: { name: string; type: string; values: { id: number; title: string; colors?: string[] }[] }[];
@@ -189,6 +193,18 @@ function trimProduct(raw: RawProduct): Product {
 /* Fetch all products (with caching)                                  */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Only show products Michael has actually published in Printify.
+ * Drafts ("Save" without "Publish") are visible too, so `visible` alone isn't enough:
+ *   - is_locked    → Publish was clicked, waiting for our site to confirm
+ *   - external.id  → publishing was confirmed
+ * A plain draft has neither.
+ */
+function isPublished(raw: RawProduct): boolean {
+  if (!raw.visible || raw.is_deleted) return false;
+  return raw.is_locked === true || Boolean(raw.external?.id);
+}
+
 async function fetchAllProductsFromPrintify(): Promise<Product[]> {
   const shopId = getShopId();
   const products: Product[] = [];
@@ -198,7 +214,7 @@ async function fetchAllProductsFromPrintify(): Promise<Product[]> {
   do {
     const res = await printifyFetch<RawProductPage>(`/shops/${shopId}/products.json?limit=50&page=${page}`);
     for (const raw of res.data) {
-      if (raw.visible && !raw.is_deleted) products.push(trimProduct(raw));
+      if (isPublished(raw)) products.push(trimProduct(raw));
     }
     lastPage = res.last_page;
     page++;
