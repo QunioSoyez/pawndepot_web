@@ -191,11 +191,16 @@ export const POST: APIRoute = async ({ request }) => {
           to: email,
           name: shipping?.name ?? session.customer_details?.name,
           orderRef,
-          items: items.data.map((li) => ({
-            name: li.description ?? (li.price?.product as Stripe.Product | undefined)?.name ?? 'Item',
-            quantity: li.quantity ?? 1,
-            amountCents: li.amount_total,
-          })),
+          items: items.data.map((li) => {
+            // checkout.ts sets product name = Printify title, description = variant ("White / L")
+            const product = li.price?.product as Stripe.Product | undefined;
+            const title = product?.name ?? li.description ?? 'Item';
+            return {
+              name: product?.description ? `${title} (${product.description})` : title,
+              quantity: li.quantity ?? 1,
+              amountCents: li.amount_total,
+            };
+          }),
           shippingCents: session.total_details?.amount_shipping ?? 0,
           taxCents: session.total_details?.amount_tax ?? 0,
           totalCents: session.amount_total ?? 0,

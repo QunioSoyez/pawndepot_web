@@ -10,7 +10,8 @@
  *       Show registered webhooks + every product's publish state. Read-only.
  *
  *   node scripts/printify-admin.mjs register
- *       Register the product:publish:started webhook → https://pawndepot.shop/api/printify-webhook
+ *       Register any missing webhooks (product:publish:started, order:shipment:created)
+ *       → https://pawndepot.shop/api/printify-webhook. Topics already registered are skipped.
  *
  *   node scripts/printify-admin.mjs delete-webhook <webhookId>
  *       Remove a registered webhook.
@@ -24,12 +25,24 @@
  *       For products stuck "Publishing…" (is_locked), call publishing_succeeded with
  *       handle https://pawndepot.shop/product/<id>. Needed once for products published
  *       before the webhook existed.
+ *
+ *   node scripts/printify-admin.mjs show-order <printifyOrderId>
+ *       Print an order's ids/labels/status/shipments (NOT the customer's address or email).
+ *
+ *   node scripts/printify-admin.mjs test-shipment <printifyOrderId>           (→ live site)
+ *   node scripts/printify-admin.mjs test-shipment <printifyOrderId> --local   (→ localhost:4321)
+ *       Send OUR webhook a correctly signed FAKE order:shipment:created event for a real
+ *       (e.g. draft test) order, so the shipped email goes to that order's customer email.
+ *       Printify itself is not involved and the order is not changed.
  */
 import { readFileSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
 
 const SITE = 'https://pawndepot.shop';
 const WEBHOOK_URL = `${SITE}/api/printify-webhook`;
-const TOPIC = 'product:publish:started';
+const TOPIC = 'product:publish:started'; // used by "simulate"
+const TOPICS = ['product:publish:started', 'order:shipment:created'];
+const LOCAL_WEBHOOK_URL = 'http://localhost:4321/api/printify-webhook';
 const API = 'https://api.printify.com/v1';
 
 /* ---------- config ---------- */
@@ -123,13 +136,18 @@ async function list() {
 async function register() {
   const secret = vars.PRINTIFY_WEBHOOK_SECRET || fail('PRINTIFY_WEBHOOK_SECRET missing from .dev.vars');
   const hooks = await api(`/shops/${SHOP}/webhooks.json`);
-  const existing = hooks.find((h) => h.topic === TOPIC);
-  if (existing) fail(`A ${TOPIC} webhook already exists (${existing.id} → ${existing.url}). Delete it first if you want to re-create it.`);
-  const created = await api(`/shops/${SHOP}/webhooks.json`, {
-    method: 'POST',
-    body: JSON.stringify({ topic: TOPIC, url: WEBHOOK_URL, secret }),
-  });
-  console.log(`✔ Registered ${created.topic} → ${created.url} (id ${created.id})`);
+  for (const topic of TOPICS) {
+    const existing = hooks.find((h) => h.topic === topic);
+    if (existing) {
+      console.log(`• ${topic} already registered (${existing.id} → ${existing.url}) — skipped`);
+      continue;
+    }
+    const created = await api(`/shops/${SHOP}/webhooks.json`, {
+      method: 'POST',
+      body: JSON.stringify({ topic, url: WEBHOOK_URL, secret }),
+    });
+    console.log(`✔ Registered ${created.topic} → ${created.url} (id ${created.id})`);
+  }
 }
 
 async function deleteWebhook(id) {
@@ -176,6 +194,54 @@ async function confirmLocked(apply) {
   }
 }
 
+async function showOrder(orderId) {
+  if (!orderId) fail('Usage: show-order <printifyOrderId>');
+  const o = await api(`/shops/${SHOP}/orders/${orderId}.json`);
+  const { address_to, ...rest } = o; // keep customer PII out of the terminal
+  console.log('Top-level fields:', Object.keys(o).join(', '));
+  console.log('address_to fields (values hidden):', Object.keys(address_to ?? {}).join(', '));
+  const pick = (k) => (rest[k] === undefined ? '(not present)' : JSON.stringify(rest[k]));
+  for (const k of ['id', 'external_id', 'label', 'status', 'metadata', 'shipments', 'created_at', 'sent_to_production_at']) {
+    console.log(`  ${k}: ${pick(k)}`);
+  }
+}
+
+async function testShipment(orderId, flag) {
+  if (!orderId || orderId.startsWith('--')) fail('Usage: test-shipment <printifyOrderId> [--local]');
+  const secret = vars.PRINTIFY_WEBHOOK_SECRET || fail('PRINTIFY_WEBHOOK_SECRET missing from .dev.vars');
+  const url = flag === '--local' ? LOCAL_WEBHOOK_URL : WEBHOOK_URL;
+  const tracking = '9400100000000000000000'; // fake USPS-style number
+  const body = JSON.stringify({
+    id: `test-${Date.now()}`,
+    type: 'order:shipment:created',
+    created_at: new Date().toISOString(),
+    resource: {
+      id: orderId,
+      type: 'order',
+      data: {
+        shop_id: Number(SHOP),
+        shipped_at: new Date().toISOString(),
+        carrier: {
+          code: 'USPS',
+          tracking_number: tracking,
+          tracking_url: `https://tools.usps.com/go/TrackConfirmAction?tLabels=${tracking}`,
+        },
+        skus: [],
+      },
+    },
+  });
+  // Same signature Printify sends: "sha256=" + hex HMAC-SHA256 of the raw body
+  const sig = createHmac('sha256', secret).update(body).digest('hex');
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Pfy-Signature': `sha256=${sig}` },
+    body,
+  });
+  console.log(`→ POST ${url}  (fake shipment for order ${orderId})`);
+  console.log(`← ${res.status} ${(await res.text()).slice(0, 200)}`);
+  console.log('  Check the Worker / dev-server log for a [printify-webhook] line, then your inbox.');
+}
+
 const [cmd, arg] = process.argv.slice(2);
 switch (cmd) {
   case 'list': await list(); break;
@@ -183,7 +249,9 @@ switch (cmd) {
   case 'delete-webhook': await deleteWebhook(arg); break;
   case 'simulate': await simulate(); break;
   case 'confirm-locked': await confirmLocked(arg === '--yes'); break;
+  case 'show-order': await showOrder(arg); break;
+  case 'test-shipment': await testShipment(arg, process.argv[4]); break;
   default:
-    console.log('Usage: node scripts/printify-admin.mjs <list | register | delete-webhook <id> | simulate | confirm-locked [--yes]>');
+    console.log('Usage: node scripts/printify-admin.mjs <list | register | delete-webhook <id> | simulate | confirm-locked [--yes] | show-order <orderId> | test-shipment <orderId> [--local]>');
     process.exit(cmd ? 1 : 0);
 }

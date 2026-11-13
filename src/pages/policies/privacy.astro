@@ -4,6 +4,7 @@
  * Static (prerendered). Written from what the code actually does (2026-11-12):
  * - Stripe Checkout collects name, email, phone, shipping address, payment (card never reaches us)
  * - stripe-webhook.ts sends name, email, phone, address to Printify (address_to)
+ * - email.ts sends order-confirmation + shipped emails via SMTP2GO (name, email, order details, ship-to)
  * - cart = browser localStorage only; no analytics/ad cookies in our code; fonts self-hosted
  * - product images load from Printify's image servers; Cloudflare observability logs on
  * If any of that changes (analytics, newsletter, new processor), update this page + `updated`.
@@ -29,19 +30,26 @@ import PolicyLayout from '../../layouts/PolicyLayout.astro';
   </p>
 
   <h2>How we use it</h2>
-  <p>To make, ship and support your order, and to contact you about it. We don't send marketing emails.</p>
+  <p>
+    To make, ship and support your order, and to email you about it: an order confirmation when
+    you check out and tracking when it ships. We don't send marketing emails.
+  </p>
 
   <h2>Who we share it with</h2>
   <ul>
     <li>
-      <strong>Stripe</strong> — processes your payment (see <a href="https://stripe.com/privacy" target="_blank" rel="noopener">Stripe's privacy policy</a>).
+      <strong>Stripe</strong> processes your payment (see <a href="https://stripe.com/privacy" target="_blank" rel="noopener">Stripe's privacy policy</a>).
     </li>
     <li>
-      <strong>Printify and their print partners and shipping carriers</strong> — receive your name,
+      <strong>Printify and their print partners and shipping carriers</strong> receive your name,
       email, phone and shipping address to make and deliver your order.
     </li>
     <li>
-      <strong>Cloudflare</strong> — hosts our site and keeps short-term technical logs (like IP
+      <strong>SMTP2GO</strong> sends our order and shipping emails, so it receives your name, email
+      address and order details.
+    </li>
+    <li>
+      <strong>Cloudflare</strong> hosts our site and keeps short-term technical logs (like IP
       address and pages requested) for security and troubleshooting.
     </li>
   </ul>

@@ -94,7 +94,7 @@ export async function sendEmail({ to, subject, text, html }: Email): Promise<voi
 /* ------------------------------------------------------------------ */
 
 export interface OrderEmailItem {
-  name: string;        // e.g. "People Over Money Tee — White / XL"
+  name: string;        // e.g. "People Over Money Tee (White / XL)"
   quantity: number;
   amountCents: number; // line total
 }
@@ -126,7 +126,7 @@ export async function sendOrderConfirmation(o: OrderConfirmation): Promise<void>
     `Thanks for your order! We've got it, and it's headed to the print shop.`,
     '',
     `Order #${o.orderRef}`,
-    ...o.items.map((i) => `  ${i.quantity} × ${i.name} — ${formatPrice(i.amountCents)}`),
+    ...o.items.map((i) => `  ${i.quantity} × ${i.name}: ${formatPrice(i.amountCents)}`),
     '',
     `  Shipping: ${formatPrice(o.shippingCents)}`,
     ...(o.taxCents > 0 ? [`  Tax: ${formatPrice(o.taxCents)}`] : []),
@@ -138,7 +138,7 @@ export async function sendOrderConfirmation(o: OrderConfirmation): Promise<void>
     '',
     `Questions? Just reply to this email or write to ${REPLY_TO}.`,
     '',
-    '— PawnDepot',
+    'PawnDepot',
     SITE,
   ].join('\n');
 
@@ -203,22 +203,22 @@ export async function sendShippedEmail(s: ShippedEmail): Promise<void> {
   const text = [
     hello,
     '',
-    `Good news — your order #${s.orderRef} is on its way!`,
+    `Good news! Your order #${s.orderRef} is on its way.`,
     '',
     ...(s.trackingNumber ? [`Carrier: ${carrier}`, `Tracking number: ${s.trackingNumber}`] : []),
     ...(url ? [`Track it here: ${url}`] : []),
-    ...(!s.trackingNumber && !url ? ['Tracking details aren\'t available yet — reply to this email and we\'ll look it up.'] : []),
+    ...(!s.trackingNumber && !url ? ['Tracking details aren\'t available yet. Reply to this email and we\'ll look it up.'] : []),
     '',
     `Tracking can take a day to show movement after the label is created.`,
     `Questions? Just reply to this email or write to ${REPLY_TO}.`,
     '',
-    '— PawnDepot',
+    'PawnDepot',
     SITE,
   ].join('\n');
 
   const body = `
     <p style="margin:0 0 12px;">${esc(hello)}</p>
-    <p style="margin:0 0 20px;">Good news — your order <strong>#${esc(s.orderRef)}</strong> is on its way!</p>
+    <p style="margin:0 0 20px;">Good news! Your order <strong>#${esc(s.orderRef)}</strong> is on its way.</p>
     ${
       s.trackingNumber
         ? `<p style="margin:0 0 20px;color:${STEEL};font-size:14px;">Carrier: <strong style="color:${INK};">${esc(carrier)}</strong><br>
@@ -232,7 +232,7 @@ export async function sendShippedEmail(s: ShippedEmail): Promise<void> {
     }
     ${
       !s.trackingNumber && !url
-        ? `<p style="margin:0 0 20px;">Tracking details aren't available yet — reply to this email and we'll look it up.</p>`
+        ? `<p style="margin:0 0 20px;">Tracking details aren't available yet. Reply to this email and we'll look it up.</p>`
         : ''
     }
     <p style="margin:0;color:${STEEL};font-size:14px;">Tracking can take a day to show movement after the label is created.</p>`;
@@ -258,7 +258,7 @@ function layout(title: string, body: string, test: boolean): string {
         </td></tr>
         ${
           test
-            ? `<tr><td style="background:#fff3cd;color:#664d03;padding:8px 24px;font-family:Arial,Helvetica,sans-serif;font-size:13px;">TEST ORDER — sandbox payment, nothing will be printed or shipped.</td></tr>`
+            ? `<tr><td style="background:#fff3cd;color:#664d03;padding:8px 24px;font-family:Arial,Helvetica,sans-serif;font-size:13px;">TEST ORDER: sandbox payment. Nothing will be printed or shipped.</td></tr>`
             : ''
         }
         <tr><td style="padding:24px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:${INK};">
