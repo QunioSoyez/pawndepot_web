@@ -12,6 +12,18 @@
 	"vars": {
 		"PRINTIFY_SHOP_ID": "29715882"
 	},
+	// Deploy guard: `wrangler deploy` fails if any of these Secrets is missing on the Worker.
+	// Set them ONLY with `npx wrangler secret put <NAME>` (never the dashboard).
+	// Note: with this list present, local dev loads ONLY these names from .dev.vars —
+	// add any new secret here AND in .dev.vars.
+	"secrets": {
+		"required": [
+			"PRINTIFY_API_TOKEN",
+			"PRINTIFY_WEBHOOK_SECRET",
+			"STRIPE_SECRET_KEY",
+			"STRIPE_WEBHOOK_SECRET"
+		]
+	},
 	"observability": {
 		"enabled": true
 	}
