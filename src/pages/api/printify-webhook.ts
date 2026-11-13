@@ -13,6 +13,7 @@
  *
  * Printify retries 3× on any 4xx/5xx and then BLOCKS the webhook for 1 hour, so we only
  * return an error when a retry could actually help (e.g. Printify's API was briefly down).
+ * If Printify rejects the confirm with a 4xx (other than 429), we log it and reply 200.
  */
 import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
@@ -105,8 +106,18 @@ export const POST: APIRoute = async ({ request, url }) => {
     console.log(`[printify-webhook] Confirmed publish (${action}) for ${productId} → ${productUrl}`);
     return text('Published');
   } catch (err) {
+    const message = (err as Error).message;
+    console.error(`[printify-webhook] publishing_succeeded failed for ${productId}:`, message);
+
+    // printifyFetch errors read "... failed: <status> <body>". A 4xx (e.g. 404 unknown product,
+    // which Printify's own "simulate" sends) won't succeed on retry — and every 4xx/5xx we return
+    // counts toward Printify's 3 retries + 1-hour block. So only ask for a retry on 429 / 5xx /
+    // network errors (no status).
+    const status = Number(message.match(/ failed: (\d{3})\b/)?.[1] ?? 0);
+    if (status >= 400 && status < 500 && status !== 429) {
+      return text(`Confirm rejected by Printify (${status}) — not retrying`);
+    }
     // Printify API hiccup → let Printify retry (up to 3×)
-    console.error(`[printify-webhook] publishing_succeeded failed for ${productId}:`, (err as Error).message);
     return text('Confirm failed', 500);
   }
 };
