@@ -9,6 +9,8 @@
  *   5. Send it to production ONLY for live-mode payments with PRINTIFY_SEND_TO_PRODUCTION = "true".
  *      Test-mode payments leave a draft order in Printify that is never printed or charged.
  *   6. Save the Printify order id on the Stripe PaymentIntent (our "already done" marker).
+ *   7. Email the shopper an order confirmation (SMTP2GO). A failed email is logged only —
+ *      it must never make Stripe retry, or we'd risk a duplicate order.
  *
  * Returning a non-2xx makes Stripe retry (for up to ~3 days), so we only do that
  * when something failed that a retry could fix.
@@ -17,6 +19,7 @@ import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
 import Stripe from 'stripe';
 import { printifyFetch, getShopId } from '../../lib/printify';
+import { sendOrderConfirmation } from '../../lib/email';
 
 export const prerender = false;
 
@@ -123,27 +126,42 @@ export const POST: APIRoute = async ({ request }) => {
     const orderRef = session.id.slice(-8).toUpperCase();
 
     // 4. Create the Printify order
-    const order = await printifyFetch<{ id: string }>(`/shops/${getShopId()}/orders.json`, {
-      method: 'POST',
-      body: JSON.stringify({
-        external_id: session.id,
-        label: `PawnDepot #${orderRef}${event.livemode ? '' : ' (TEST)'}`,
-        line_items: lineItems,
-        shipping_method: PRINTIFY_STANDARD_SHIPPING,
-        address_to: {
-          first_name: firstName,
-          last_name: lastName,
-          email: session.customer_details?.email ?? '',
-          phone: session.customer_details?.phone ?? '',
-          country: addr.country ?? 'US',
-          region: addr.state ?? '',
-          address1: addr.line1,
-          address2: addr.line2 ?? '',
-          city: addr.city,
-          zip: addr.postal_code,
-        },
-      }),
-    });
+    // external_id = Stripe session id, so Printify itself refuses a second order for the same
+    // payment (409, code 8503). That happens when two deliveries of the same event race past the
+    // metadata check above — e.g. Stripe sending one event twice at once, or (in sandbox) both the
+    // live site's destination and a local `stripe listen` getting it. The delivery that created the
+    // order handles the rest (metadata, production, email), so this one just stops.
+    let order: { id: string };
+    try {
+      order = await printifyFetch<{ id: string }>(`/shops/${getShopId()}/orders.json`, {
+        method: 'POST',
+        body: JSON.stringify({
+          external_id: session.id,
+          label: `PawnDepot #${orderRef}${event.livemode ? '' : ' (TEST)'}`,
+          line_items: lineItems,
+          shipping_method: PRINTIFY_STANDARD_SHIPPING,
+          address_to: {
+            first_name: firstName,
+            last_name: lastName,
+            email: session.customer_details?.email ?? '',
+            phone: session.customer_details?.phone ?? '',
+            country: addr.country ?? 'US',
+            region: addr.state ?? '',
+            address1: addr.line1,
+            address2: addr.line2 ?? '',
+            city: addr.city,
+            zip: addr.postal_code,
+          },
+        }),
+      });
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (/ failed: 409 /.test(msg) && msg.includes('8503')) {
+        console.log(`[webhook] ${session.id} already has a Printify order (created by another delivery) — skipping`);
+        return text('Already processed');
+      }
+      throw err;
+    }
     console.log(`[webhook] Created Printify order ${order.id} for ${session.id} (livemode=${event.livemode})`);
 
     // 6. Mark done right away, so a resend can't create a second order
@@ -163,6 +181,40 @@ export const POST: APIRoute = async ({ request }) => {
       }
     } else {
       console.log(`[webhook] Printify order ${order.id} left as draft (test mode or production switch off)`);
+    }
+
+    // 7. Order confirmation email — best effort, never fails the webhook
+    const email = session.customer_details?.email;
+    if (email) {
+      try {
+        await sendOrderConfirmation({
+          to: email,
+          name: shipping?.name ?? session.customer_details?.name,
+          orderRef,
+          items: items.data.map((li) => ({
+            name: li.description ?? (li.price?.product as Stripe.Product | undefined)?.name ?? 'Item',
+            quantity: li.quantity ?? 1,
+            amountCents: li.amount_total,
+          })),
+          shippingCents: session.total_details?.amount_shipping ?? 0,
+          taxCents: session.total_details?.amount_tax ?? 0,
+          totalCents: session.amount_total ?? 0,
+          shipTo: {
+            name: shipping?.name,
+            line1: addr.line1,
+            line2: addr.line2,
+            city: addr.city,
+            state: addr.state,
+            postalCode: addr.postal_code,
+          },
+          test: !event.livemode,
+        });
+        console.log(`[webhook] Order confirmation emailed for #${orderRef}`);
+      } catch (err) {
+        console.error(`[webhook] Order confirmation email FAILED for #${orderRef}:`, (err as Error).message);
+      }
+    } else {
+      console.warn(`[webhook] No customer email on ${session.id} — confirmation not sent`);
     }
 
     return text('OK');
