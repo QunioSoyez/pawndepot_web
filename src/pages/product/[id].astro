@@ -37,8 +37,23 @@ const clientData = product
   : '';
 
 const mainImage = product ? primaryImage(product) : undefined;
+// Plain-text meta description: strip tags, then decode the HTML entities Printify
+// uses (Astro escapes the attribute, so a raw "&nbsp;" would show up literally).
+const decodeEntities = (s: string) =>
+  s
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&'); // last, so "&amp;nbsp;" stays as text
 const description = product
-  ? product.descriptionHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 155)
+  ? decodeEntities(product.descriptionHtml.replace(/<[^>]+>/g, ' '))
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 155)
   : undefined;
 ---
 
