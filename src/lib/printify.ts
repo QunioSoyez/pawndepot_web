@@ -154,10 +154,13 @@ export function getShopId(): string {
  * New product type showing up under "Other"? Run `node scripts/printify-admin.mjs list`
  * to see its tags and add a rule here — or tag it "cat:<Name>" in Printify.
  */
-const CATEGORY_RULES: { tag: string; category: Category }[] = [
-  { tag: 'Hoodies', category: { slug: 'hoodies', name: 'Hoodies' } },
-  { tag: 'T-shirts', category: { slug: 'tees', name: 'Tees' } },
-  { tag: 'Mugs', category: { slug: 'mugs', name: 'Mugs' } },
+// `blueprints` = Printify catalog item ids used as a FALLBACK when a product has no matching
+// tag (Printify sometimes drops all tags after a design edit — seen 2026-11-12).
+// New product type? `node scripts/printify-admin.mjs list` shows each product's blueprint.
+const CATEGORY_RULES: { tag: string; blueprints: number[]; category: Category }[] = [
+  { tag: 'Hoodies', blueprints: [77], category: { slug: 'hoodies', name: 'Hoodies' } },
+  { tag: 'T-shirts', blueprints: [12, 145], category: { slug: 'tees', name: 'Tees' } },
+  { tag: 'Mugs', blueprints: [425], category: { slug: 'mugs', name: 'Mugs' } },
 ];
 
 const OTHER: Category = { slug: 'other', name: 'Other' };
@@ -169,9 +172,10 @@ function slugify(text: string): string {
 
 /**
  * A product's type. A manual "cat:<Name>" tag added in Printify wins
- * (e.g. "cat:Tank Tops"); otherwise the first matching CATEGORY_RULES tag; else "Other".
+ * (e.g. "cat:Tank Tops"); otherwise the first matching CATEGORY_RULES tag; then the first rule
+ * listing the product's blueprint id; else "Other".
  */
-function categoryFor(tags: string[]): Category {
+function categoryFor(tags: string[], blueprintId?: number): Category {
   const manual = tags.find((t) => /^cat:/i.test(t.trim()));
   if (manual) {
     const name = manual.trim().slice(4).trim();
@@ -179,7 +183,11 @@ function categoryFor(tags: string[]): Category {
     if (slug) return { slug, name };
   }
   const lower = new Set(tags.map((t) => t.trim().toLowerCase()));
-  return CATEGORY_RULES.find((r) => lower.has(r.tag.toLowerCase()))?.category ?? OTHER;
+  return (
+    CATEGORY_RULES.find((r) => lower.has(r.tag.toLowerCase()))?.category ??
+    CATEGORY_RULES.find((r) => blueprintId !== undefined && r.blueprints.includes(blueprintId))?.category ??
+    OTHER
+  );
 }
 
 /**
@@ -240,7 +248,7 @@ function trimProduct(raw: RawProduct): Product {
     title: raw.title,
     descriptionHtml: raw.description,
     tags: raw.tags,
-    category: categoryFor(raw.tags ?? []),
+    category: categoryFor(raw.tags ?? [], raw.blueprint_id),
     options,
     variants,
     images,
