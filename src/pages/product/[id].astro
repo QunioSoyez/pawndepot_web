@@ -457,6 +457,35 @@ const description = product
     color: #333;
   }
 
+  /* Size chart: Printify puts it in the description as <table id="size-guide">
+     with inline styles (word-break, padding, min-width). set:html content is not
+     scoped, so these need :global(), and !important to beat the inline styles.
+     The table scrolls sideways on its own instead of squeezing or widening the page. */
+  .description :global(table) {
+    display: block;
+    max-width: 100%;
+    min-width: 0 !important;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin-top: 1rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .description :global(th),
+  .description :global(td) {
+    white-space: nowrap;
+    word-break: normal !important;
+    padding: 0.5rem 0.65rem !important;
+    font-size: 0.9rem !important;
+  }
+
+  /* Keep the row labels ("Width, in") visible while scrolling */
+  .description :global(tr > :first-child) {
+    position: sticky;
+    left: 0;
+    background: var(--paper);
+  }
+
   @media (max-width: 800px) {
     .product {
       grid-template-columns: 1fr;
