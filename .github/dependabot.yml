@@ -1,0 +1,47 @@
+# Dependabot version updates (Phase 1 step 3 of the AppSec pipeline).
+# Alerts + security updates are turned on by the QunioSoyez org security configuration.
+#
+# Live store: merging any PR = production deploy (Cloudflare Workers Builds).
+# Test locally (npm ci, npm run build, checkout in Stripe test mode) before merging npm PRs.
+version: 2
+updates:
+  # GitHub Actions pins (SHA + "# vX.Y.Z" comment, incl. the security-workflows pin)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "20:00"
+      timezone: "America/New_York"
+    # Wait 7 days after a release before proposing it
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "deps(actions)"
+
+  # astro, @astrojs/cloudflare, stripe, wrangler, fonts
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "20:00"
+      timezone: "America/New_York"
+    cooldown:
+      default-days: 7
+    groups:
+      # Minor + patch bumps in one PR. Major bumps (astro, @astrojs/cloudflare, stripe)
+      # come as separate PRs: read their upgrade notes first. A stripe major can change
+      # the Stripe API version the webhooks expect.
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "deps(npm)"
