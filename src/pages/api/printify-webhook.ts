@@ -135,7 +135,7 @@ export const POST: APIRoute = async ({ request, url }) => {
     return text('Published');
   } catch (err) {
     const message = (err as Error).message;
-    console.error(`[printify-webhook] publishing_succeeded failed for ${productId}:`, message);
+    console.error('[printify-webhook] publishing_succeeded failed for', `${productId}:`, message);
 
     // printifyFetch errors read "... failed: <status> <body>". A 4xx (e.g. 404 unknown product,
     // which Printify's own "simulate" sends) won't succeed on retry — and every 4xx/5xx we return
@@ -167,7 +167,7 @@ async function handleShipment(event: PrintifyEvent): Promise<Response> {
     order = await printifyFetch<PrintifyOrder>(`/shops/${getShopId()}/orders/${orderId}.json`);
   } catch (err) {
     const status = errStatus(err);
-    console.error(`[printify-webhook] Couldn't load order ${orderId} for shipment email:`, (err as Error).message);
+    console.error('[printify-webhook] Couldn\'t load order', orderId, 'for shipment email:', (err as Error).message);
     // 4xx (e.g. "simulate" sends a fake order id) won't fix itself → don't burn Printify's retries
     if (status >= 400 && status < 500 && status !== 429) return text(`Order lookup failed (${status}) — not retrying`);
     return text('Order lookup failed', 500); // Printify API hiccup → let Printify retry
@@ -196,7 +196,7 @@ async function handleShipment(event: PrintifyEvent): Promise<Response> {
     });
     console.log(`[printify-webhook] Shipped email sent for #${orderRef} (${carrier?.code ?? 'no carrier'})`);
   } catch (err) {
-    console.error(`[printify-webhook] Shipped email FAILED for #${orderRef}:`, (err as Error).message);
+    console.error('[printify-webhook] Shipped email FAILED for', `#${orderRef}:`, (err as Error).message);
   }
   return text('Shipment noted');
 }

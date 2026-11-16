@@ -12,4 +12,4 @@ permissions:
 
 jobs:
   security:
-    uses: QunioSoyez/security-workflows/.github/workflows/security-scan.yml@ad132b8fb124bc082a5cda1c39b76691f635ddc0
+    uses: QunioSoyez/security-workflows/.github/workflows/security-scan.yml@41e2334b12a47502e5f489c8936bbf006f43e717

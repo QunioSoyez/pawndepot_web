@@ -177,7 +177,7 @@ export const POST: APIRoute = async ({ request }) => {
       } catch (err) {
         // Order exists and is marked done — don't let Stripe retry and duplicate it.
         // Send it to production by hand in Printify.
-        console.error(`[webhook] Printify order ${order.id} created but NOT sent to production:`, err);
+        console.error('[webhook] Printify order', order.id, 'created but NOT sent to production:', err);
       }
     } else {
       console.log(`[webhook] Printify order ${order.id} left as draft (test mode or production switch off)`);
@@ -216,7 +216,7 @@ export const POST: APIRoute = async ({ request }) => {
         });
         console.log(`[webhook] Order confirmation emailed for #${orderRef}`);
       } catch (err) {
-        console.error(`[webhook] Order confirmation email FAILED for #${orderRef}:`, (err as Error).message);
+        console.error('[webhook] Order confirmation email FAILED for', `#${orderRef}:`, (err as Error).message);
       }
     } else {
       console.warn(`[webhook] No customer email on ${session.id} — confirmation not sent`);
@@ -224,7 +224,7 @@ export const POST: APIRoute = async ({ request }) => {
 
     return text('OK');
   } catch (err) {
-    console.error(`[webhook] Failed for ${session.id}:`, err);
+    console.error('[webhook] Failed for', `${session.id}:`, err);
     return text('Order creation failed', 500); // Stripe will retry
   }
 };
